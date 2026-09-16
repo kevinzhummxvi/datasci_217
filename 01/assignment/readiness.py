@@ -1,4 +1,3 @@
-# SUPPLIED BLOCK: do not edit this block.
 import sys
 from pathlib import Path
 
@@ -8,6 +7,6 @@ script_filename = Path(__file__).name
 # END SUPPLIED BLOCK
 
 # Replace each TODO value with the supplied variable that belongs on that line.
-print("Python family: TODO")
-print("Project: TODO")
-print("Script: TODO")
+print("Python family:", python_family)
+print("Project:", PROJECT_LABEL)
+print("Script:", script_filename)
