@@ -9,28 +9,28 @@ notion:
 
 # DLC: Advanced Data Cleaning
 
-*These are power-user features for when you need to go beyond basic data cleaning. Master the core content first!*
+_These are power-user features for when you need to go beyond basic data cleaning. Master the core content first!_
 
 # Modern Pandas Extension Types
 
-The core lecture introduces nullable `Int64` because whole-number columns sometimes contain missing values. This bonus extends the same idea to nullable floats, booleans, and strings, then explores their broader memory and interoperability implications.
+The core lecture introduces nullable `Int64`, `string`, and `boolean`. This bonus adds nullable floats and their memory and interoperability implications.
 
-*Fun fact: For years, pandas had to convert integers to floats when there was missing data. Extension types finally fixed this - no more mysterious float64 columns!*
+_Fun fact: For years, pandas had to convert integers to floats when there was missing data. Extension types finally fixed this: no more mysterious float64 columns!_
 
 ## Extension Types for Better Missing Data Handling
 
 Traditional NumPy-based types couldn't represent missing integers or booleans. Extension types provide proper NA support across all data types.
 
-**Reference:**
+### Reference Card: Nullable extension types
 
-- `astype('Int64')` - Nullable integer (note capital I)
-- `astype('Float64')` - Nullable float
-- `astype('boolean')` - Nullable boolean
-- `astype('string')` - Explicit nullable string type
-- `pd.NA` - Missing value marker used by nullable extension types
-- `np.nan` - Floating missing-value sentinel also used by pandas 3's inferred `str` dtype
+- `astype('Int64')`: Nullable integer (note capital I)
+- `astype('Float64')`: Nullable float
+- `astype('boolean')`: Nullable boolean
+- `astype('string')`: Explicit nullable string type
+- `pd.NA`: Missing value marker used by nullable extension types
+- `np.nan`: Floating missing-value sentinel also used by pandas 3's inferred `str` dtype
 
-**Brief Example:**
+### Code Snippet: Old vs. new missing-data handling
 
 ```python
 # Old way: integers become floats with missing data
@@ -53,14 +53,15 @@ Extension types provide consistent missing-data semantics and can improve memory
 
 Under pandas 3, inferred text uses the `str` dtype. Its storage may be backed by PyArrow when PyArrow is installed; otherwise pandas uses its non-PyArrow implementation. An explicit `string` dtype remains useful when nullable-string semantics are part of the data contract. Neither representation is guaranteed to use less memory than `object` for every dataset.
 
-**When to use:**
+### Choosing an extension type
+
 - **Int64, Int32, Int16, Int8**: Integer data that might have missing values
 - **Float64, Float32**: When you need explicit control over precision
 - **boolean**: Boolean data with potential missing values
 - **str or string**: Text data; choose explicit `string` when nullable-string semantics are required, and measure memory for the actual backing and data
 - **category**: Repeated low-cardinality values when category semantics fit; measure the memory effect
 
-**Brief Example:**
+### Code Snippet: Convert a DataFrame to extension types
 
 ```python
 # Convert existing DataFrame to extension types
@@ -81,24 +82,27 @@ print(df)
 
 # Advanced Regular Expressions for Text Data
 
-Regular expressions (regex) are powerful for complex pattern matching, but they can be overkill for simple tasks.
+Regular expressions (regex) are powerful for complex pattern matching, but they can be overkill for simple tasks. The core lecture uses `[0-9]` and `{n}` with `str.fullmatch()`; the syntax below goes further.
 
-*Warning: Regular expressions are write-only code - you write them once, and six months later you have no idea what they do. Comment generously!*
+_Warning: Regular expressions are write-only code. You write them once, and six months later you have no idea what they do. Comment generously!_
 
-**Reference:**
+## Regex syntax and extraction
 
-- `\d` - Any digit (0-9)
-- `\w` - Any word character (letter, digit, underscore)
-- `\s` - Any whitespace
-- `+` - One or more of previous
-- `*` - Zero or more of previous
-- `{n,m}` - Between n and m of previous
-- `[abc]` - Any of a, b, or c
-- `^` - Start of string
-- `$` - End of string
-- `()` - Capture group
+### Reference Card: Regex syntax
 
-**Brief Example:**
+- `\d`: Any digit (0-9)
+- `\w`: Any word character (letter, digit, underscore)
+- `\s`: Any whitespace
+- `+`: One or more of previous
+- `*`: Zero or more of previous
+- `{n,m}`: Between n and m of previous
+- `[abc]`: Any of a, b, or c
+- `^`: Start of string
+- `$`: End of string
+- `()`: Capture group
+- `df.replace(pattern, replacement, regex=True)`: Replace regex matches in text values
+
+### Code Snippet: Extract phone numbers and validate emails
 
 ```python
 # Extract phone numbers from text
@@ -121,16 +125,22 @@ print(valid)  # [True, False, True]
 
 Beyond simple threshold-based outlier detection, statistical methods can identify unusual values.
 
-**Reference:**
+## Statistical outlier methods
 
-- **IQR Method**: Values beyond Q1 - 1.5×IQR or Q3 + 1.5×IQR
+### Reference Card: Outlier detection methods
+
+- **IQR Method**: Values below `Q1 - 1.5 * IQR` or above `Q3 + 1.5 * IQR`
 - **Z-Score Method**: Values with |z-score| > 3
 - **Modified Z-Score**: More robust for skewed data
 - **Isolation Forest**: Machine learning approach (sklearn)
 
-**Brief Example:**
+### Code Snippet: Flag outliers with IQR and z-score
 
 ```python
+# Twenty patients' cholesterol readings (mg/dL); two are far outside the rest
+df = pd.DataFrame({'value': [180, 190, 175, 185, 195, 200, 178, 182, 188, 192,
+                              176, 184, 198, 179, 186, 191, 183, 450, 460, 187]})
+
 # IQR-based outlier detection
 Q1 = df['value'].quantile(0.25)
 Q3 = df['value'].quantile(0.75)
@@ -152,15 +162,49 @@ outliers_z = df[z_scores > 3]
 
 Advanced string operations for specialized text cleaning tasks.
 
-**Reference:**
+## Splitting and Joining Values
 
-- `str.extract(pattern, expand=True)` - Extract regex groups into columns
-- `str.extractall(pattern)` - Extract all matches (returns MultiIndex)
-- `str.normalize('NFKD')` - Unicode normalization
-- `str.translate(table)` - Character-level replacement
-- `str.encode()` / `str.decode()` - Character encoding conversion
+Splitting breaks each value into parts; joining puts parts back together. Use this when one column holds several facts, such as a full name or a `city, state` pair.
 
-**Brief Example:**
+### Reference Card: String splitting
+
+| Item | Purpose / arguments | Output / note |
+| --- | --- | --- |
+| `series.str.split(sep, regex=False)` | Split on a literal separator | `Series` of lists |
+| `series.str.split(sep, expand=True, regex=False)` | Expand split parts into columns | `DataFrame` |
+| `series.str.cat(sep=' ')` | Combine all non-missing strings into one | One string |
+| `series.str.join(sep)` | Join the strings within each list value | String `Series` |
+
+### Code Snippet: Split a compound field
+
+```python
+full_names = pd.Series(['Alice Smith', 'Bob Jones', 'Charlie Brown'])
+print(full_names.str.split(' '))               # a list per value
+print(full_names.str.split(' ', expand=True))  # one column per part
+```
+
+```text
+0      [Alice, Smith]
+1        [Bob, Jones]
+2    [Charlie, Brown]
+dtype: object
+         0      1
+0    Alice  Smith
+1      Bob  Jones
+2  Charlie  Brown
+```
+
+## Extracting and normalizing text
+
+### Reference Card: Advanced string methods
+
+- `str.extract(pattern, expand=True)`: Extract regex groups into columns
+- `str.extractall(pattern)`: Extract all matches (returns MultiIndex)
+- `str.normalize('NFKD')`: Unicode normalization
+- `str.translate(table)`: Character-level replacement
+- `str.encode()` / `str.decode()`: Character encoding conversion
+
+### Code Snippet: Parse addresses and normalize unicode
 
 ```python
 # Extract multiple components from structured text
@@ -181,26 +225,17 @@ print(normalized)  # ['cafe', 'naive', 'resume']
 
 # Advanced Duplicate Handling
 
-More sophisticated approaches to finding and handling duplicates.
+The core lecture finds exact repeats and repeated identifiers with `duplicated()`. Near-duplicates, such as `John Smith` and `Jon Smith`, differ by a typo, so exact comparison misses them.
 
-**Reference:**
+## Fuzzy matching for near-duplicates
 
-- `subset=['col1', 'col2']` - Check specific columns only
-- `keep='first'` - Keep first occurrence (default)
-- `keep='last'` - Keep last occurrence
-- `keep=False` - Mark all duplicates as True
+### Reference Card: Fuzzy matching
+
 - Fuzzy matching for near-duplicates (requires `fuzzywuzzy` or similar)
 
-**Brief Example:**
+### Code Snippet: Find near-duplicate names
 
 ```python
-# Find ALL duplicates (including first occurrence)
-df = pd.DataFrame({'name': ['Alice', 'Bob', 'Alice', 'Charlie', 'Bob'],
-                   'score': [85, 90, 88, 92, 90]})
-
-all_dupes = df[df.duplicated(subset=['name'], keep=False)]
-print(all_dupes)  # Shows all Alice and Bob rows
-
 # Fuzzy string matching for near-duplicates
 from fuzzywuzzy import fuzz
 names = pd.Series(['John Smith', 'Jon Smith', 'Jane Doe'])
@@ -219,14 +254,16 @@ find_similar(names)
 
 Reduce memory usage by choosing optimal data types.
 
-**Reference:**
+## Downcasting numbers and categorizing strings
 
-- `pd.to_numeric(downcast='integer')` - Use smallest int type
-- `pd.to_numeric(downcast='float')` - Use smallest float type
-- `astype('category')` - For repeated string values
-- `astype('Int8')`, `astype('Int16')`, etc. - Specific sizes
+### Reference Card: Memory-efficient dtypes
 
-**Brief Example:**
+- `pd.to_numeric(downcast='integer')`: Use smallest int type
+- `pd.to_numeric(downcast='float')`: Use smallest float type
+- `astype('category')`: For repeated string values
+- `astype('Int8')`, `astype('Int16')`, etc.: Specific sizes
+
+### Code Snippet: Shrink a DataFrame's memory footprint
 
 ```python
 # Before optimization
@@ -246,53 +283,68 @@ print(f"Optimized memory: {df.memory_usage(deep=True).sum() / 1024:.1f} KB")
 
 Use `np.where()` and `np.select()` for complex conditional replacements.
 
-**Reference:**
+## Vectorized conditional logic
 
-- `np.where(condition, if_true, if_false)` - Simple if-else
-- `np.select(conditions_list, choices_list, default)` - Multiple conditions
-- `pd.Series.where(condition, other)` - Keep values where True
-- `pd.Series.mask(condition, other)` - Replace values where True
+### Reference Card: np.where and np.select
 
-**Brief Example:**
+- `np.where(condition, if_true, if_false)`: Two outcomes, like `if`/`else`.
+- `np.select(conditions_list, choices_list, default)`: Several outcomes; the first `True` condition wins, like `if`/`elif`, and `default` covers rows where none is `True`.
+
+### Code Snippet: Stage blood pressure without apply
+
+The lecture's `bp_stage()` runs once per row through `apply(axis=1)`. The same rule written as whole-column conditions gives the same stages in one step.
 
 ```python
-# Simple conditional replacement
-df = pd.DataFrame({'score': [55, 65, 75, 85, 95]})
-df['grade'] = np.where(df['score'] >= 70, 'Pass', 'Fail')
+vitals = pd.DataFrame({'sbp': [118, 142, 134, 126], 'dbp': [76, 84, 78, 92]})  # mmHg
 
-# Multiple conditions
+# Two outcomes: np.where
+vitals['sbp_140_plus'] = np.where(vitals['sbp'] >= 140, 'yes', 'no')
+
+# Several outcomes: the first True condition wins, as in if/elif
 conditions = [
-    df['score'] >= 90,
-    df['score'] >= 80,
-    df['score'] >= 70,
-    df['score'] >= 60
+    (vitals['sbp'] >= 140) | (vitals['dbp'] >= 90),
+    (vitals['sbp'] >= 130) | (vitals['dbp'] >= 80),
 ]
-choices = ['A', 'B', 'C', 'D']
-df['letter_grade'] = np.select(conditions, choices, default='F')
-print(df)
+choices = ['stage 2', 'stage 1']
+vitals['bp_stage'] = np.select(conditions, choices, default='below stage 1')
+print(vitals)
 ```
+
+```text
+   sbp  dbp sbp_140_plus       bp_stage
+0  118   76           no  below stage 1
+1  142   84          yes        stage 2
+2  134   78           no        stage 1
+3  126   92           no        stage 2
+```
+
+# Configuration-Driven Cleaning
+
+Configuration files can make repeated pipelines more maintainable and reproducible. If a pipeline is reused across sources, a small dictionary or reviewed configuration file can hold genuinely changeable contract values so transformation and validation do not drift apart.
+
+Keep genuinely changeable rules separate from the transformation logic, but do not turn every implementation constant into an option. Changing a rule still requires a documented decision and a fresh validation run.
+
+## Configuration Guidance
+
+Use a Python dictionary for a small, local configuration; use a reviewed CSV, JSON, or text file when parameters must be shared. Keep transformations in functions and document the source of each cleaning rule.
 
 # When to Use These Techniques
 
-**Regular Expressions:** Email validation, phone number extraction, parsing log files, complex text cleaning.
-
-**Advanced Outlier Detection:** Financial data, scientific measurements, when IQR/percentile methods aren't appropriate.
-
-**Complex String Operations:** Parsing addresses, standardizing names, cleaning web-scraped data.
-
-**Fuzzy Matching:** Merging datasets with typos, de-duplicating user input, matching company names.
-
-**Memory Optimization:** Working with large datasets (>1GB), when speed is critical, preparing data for deployment.
-
-**Conditional Replacement:** Complex business logic, deriving new categories, data validation with multiple rules.
+- **Regular Expressions**: Email validation, phone number extraction, parsing log files, complex text cleaning.
+- **Advanced Outlier Detection**: Financial data, scientific measurements, when IQR/percentile methods aren't appropriate.
+- **Complex String Operations**: Parsing addresses, standardizing names, cleaning web-scraped data.
+- **Fuzzy Matching**: Merging datasets with typos, de-duplicating user input, matching company names.
+- **Memory Optimization**: Working with large datasets (>1GB), when speed is critical, preparing data for deployment.
+- **Conditional Replacement**: Clinical staging rules on large tables, deriving new categories, data validation with multiple rules.
+- **Configuration-Driven Cleaning**: The same cleaning rules reused across sites, sources, or repeated data deliveries.
 
 # Optional Reference: Sampling Designs and Resampling
 
-The core lecture introduces simple random sampling and names the main tools. The techniques below show additional designs and resampling patterns; each one answers a different selection question.
+The core lecture uses `df.sample()` to spot-check rows. The techniques below show additional designs and resampling patterns; each one answers a different selection question.
 
 ## Stratified Sampling
 
-Stratified sampling divides the sampling frame into defined strata, then samples within each stratum. Use `GroupBy.sample` when the design calls for a fixed number or fraction from every group. The strata and allocation are analytical choices; every group must have enough rows unless sampling with replacement is deliberate. For a train/test split that preserves a label's proportions, see `sklearn.model_selection.train_test_split(..., stratify=labels, random_state=...)`.
+Stratified sampling divides the sampling frame into defined strata, then samples within each stratum. Use `GroupBy.sample` when the design calls for a fixed number or fraction from every group ([Lecture 08](../08/README.md#basic-groupby-operations) teaches `groupby()`). The strata and allocation are analytical choices; every group must have enough rows unless sampling with replacement is deliberate. For a train/test split that preserves a label's proportions, see `sklearn.model_selection.train_test_split(..., stratify=labels, random_state=...)`.
 
 ```python
 frame = pd.DataFrame({
@@ -310,7 +362,7 @@ print(by_site)
 ## Weighted and Systematic Sampling
 
 - `df.sample(weights='weight')` uses caller-supplied selection weights, which must be validated and justified by the sampling design.
-- Systematic sampling chooses a random start and then every *step*th row. Ordering or periodic structure can make it biased, so `df.iloc[start::step]` is only appropriate when that risk has been considered.
+- Systematic sampling chooses a random start and then every _step_-th row. Ordering or periodic structure can make it biased, so `df.iloc[start::step]` is only appropriate when that risk has been considered.
 
 ```python
 weighted_frame = frame.assign(weight=[1, 1, 1, 1, 2, 2, 2, 2])
@@ -326,7 +378,7 @@ print(systematic)
 
 ## Shuffling and Permutation
 
-Shuffling changes row order while retaining every row; it is useful when order is not meaningful. `df.sample(frac=1, random_state=42)` returns a shuffled DataFrame. `np.random.permutation` returns a permutation of positions, which can be reused to reorder aligned arrays or a DataFrame with `.iloc`.
+Shuffling changes row order while retaining every row; it is useful when order is not meaningful. `df.sample(frac=1, random_state=42)` returns a shuffled DataFrame. `np.random.default_rng().permutation()` returns a permutation of positions, which can be reused to reorder aligned arrays or a DataFrame with `.iloc`.
 
 ```python
 shuffled = frame.sample(frac=1, random_state=42)

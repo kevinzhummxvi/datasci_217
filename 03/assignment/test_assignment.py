@@ -1,13 +1,27 @@
-"""Public pytest contract for Assignment 03."""
+"""Public pytest contract for Assignment 03.
+
+One test per check, so a failing run names the artifact to fix. The checks read
+committed files only; no submitted code is imported or executed.
+"""
 
 from pathlib import Path
-import subprocess
 import sys
+
+import pytest
 
 
 ASSIGNMENT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(ASSIGNMENT_DIR))
+
+from grading import grade_submission  # noqa: E402
 
 
-def test_assignment_artifacts():
-    result = subprocess.run([sys.executable, "-B", "check_assignment.py"], cwd=ASSIGNMENT_DIR, text=True, capture_output=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+RESULT = grade_submission(ASSIGNMENT_DIR)
+
+
+@pytest.mark.parametrize("check", RESULT["tests"], ids=[check["test-name"] for check in RESULT["tests"]])
+def test_assignment_artifact(check):
+    assert check["passed"], (
+        f"{check['detail']} "
+        f"[{check['score']}/{check['max-score']} points; run `python3 check_assignment.py` for the full report]"
+    )

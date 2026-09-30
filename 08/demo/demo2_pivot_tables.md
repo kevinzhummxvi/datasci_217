@@ -1,809 +1,344 @@
-# Demo 2: Pivot Tables and Cross-Tabulations
+---
+jupyter:
+  jupytext:
+    notebook_metadata_filter: language_info
+    text_representation:
+      extension: .md
+      format_name: markdown
+      format_version: '1.3'
+      jupytext_version: 1.18.1
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+  language_info:
+    name: python
+    version: 3.13
+---
 
-## Learning Objectives
-- Create pivot tables for multi-dimensional analysis
-- Use cross-tabulations for frequency analysis
-- Apply advanced pivot operations
-- Handle missing values and totals
+# Demo 2: Group Coverage and Result Shapes
+
+A clinic network's quarterly report groups 100,000 synthetic visits by clinic and by department. This demo checks which visits and which clinics the default report silently leaves out, then adds department context to every visit with `transform`, keeps or drops whole departments with `filter`, and runs custom per-department summaries with `apply`. Everything here comes from Lecture 08 up to the second demo break, plus Lectures 01 to 07.
+
+**How to run:** open this notebook in Colab from the lecture page's Colab link, or locally in VS Code with the kernel set to a `.venv` made by `uv venv --seed` and `uv pip install -r requirements.txt` in this folder (Lecture 03). Run the cells from top to bottom; after each step, an **Expect** line says what you should see. Colab does not save your changes back to GitHub; use **File → Save a copy in Drive** to keep them. Tested 2026-09-25 with Python 3.13, pandas 3.0.5, and NumPy 2.3.3; the whole notebook runs in under a minute. The patient IDs and values are synthetic.
 
 ## Setup
 
+The first cell installs pandas 3.0.5, the course version. Colab ships an older pandas (2.2). A `.venv` made with `uv venv --seed` includes pip, so the same `%pip` cell works locally too.
+
 ```python
-import pandas as pd
+# Setup: install the course's pandas version (Colab and local)
+%pip install -q pandas==3.0.5
+```
+
+**Expect:** `Note: you may need to restart the kernel to use updated packages.`, perhaps after a notice that a newer pip is available; neither needs any action. Locally, with the requirements already installed, the cell changes nothing and you can go on. In Colab, pip may also print a dependency conflict because some preinstalled packages expect pandas 2.2; that is expected, and this demo does not use them. If Colab asks you to restart the session (or says pandas was previously imported), choose **Runtime → Restart session**, then continue with the next cell. You do not need to rerun the install.
+
+```python
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
-# Set inline plotting for Jupyter
-%matplotlib inline
-
-# Set random seed for reproducibility
-np.random.seed(42)
+print('pandas', pd.__version__)
 ```
 
-## Part 1: Basic Pivot Tables
+**Expect:** `pandas 3.0.5`.
 
-### Create Sample Data
+## Part 1: Which Groups Appear in a Summary
 
-```python
-# Create large-scale sales dataset (100,000 transactions)
-print("=== Creating Large-Scale Sales Dataset ===")
-np.random.seed(42)
-n_transactions = 100000
+This demo builds the same visit log Demo 1 used, so it runs on its own. Rerun the next cell even if you still have Demo 1 open.
 
-# Generate realistic sales data
-products = [
-    "Electronics",
-    "Clothing",
-    "Books",
-    "Home",
-    "Sports",
-    "Toys",
-    "Food",
-    "Beauty",
-]
-regions = ["North", "South", "East", "West", "Central"]
-categories = ["Premium", "Standard", "Budget"]
-sales_channels = ["Online", "Retail", "Wholesale"]
-
-# Product-specific pricing
-product_base_prices = {
-    "Electronics": (200, 2000),
-    "Clothing": (30, 400),
-    "Books": (15, 60),
-    "Home": (50, 900),
-    "Sports": (40, 600),
-    "Toys": (20, 250),
-    "Food": (5, 50),
-    "Beauty": (10, 150),
-}
-
-# Generate data
-transactions = []
-for i in range(n_transactions):
-    product = np.random.choice(products)
-    region = np.random.choice(regions)
-    category = np.random.choice(categories)
-    channel = np.random.choice(sales_channels)
-
-    # Correlated pricing: Premium > Standard > Budget
-    price_multiplier = {"Premium": 1.5, "Standard": 1.0, "Budget": 0.7}[
-        category
-    ]
-    price_min, price_max = product_base_prices[product]
-    unit_price = np.random.uniform(price_min, price_max) * price_multiplier
-
-    # Quantity inversely correlated with price
-    quantity = max(
-        1,
-        int(
-            np.random.exponential(5)
-            * (1 - (unit_price - price_min) / (price_max * 1.5 - price_min))
-        ),
-    )
-    quantity = min(quantity, 50)
-
-    sales = unit_price * quantity
-
-    # Add seasonal variation
-    month = np.random.randint(1, 13)
-    seasonal_mult = 1.0 + 0.3 * np.sin(
-        2 * np.pi * month / 12
-    )  # Seasonal pattern
-    sales *= seasonal_mult
-
-    transactions.append({
-        "Product": product,
-        "Region": region,
-        "Category": category,
-        "Channel": channel,
-        "Unit_Price": round(unit_price, 2),
-        "Quantity": quantity,
-        "Sales": round(sales, 2),
-        "Month": month,
-    })
-
-df = pd.DataFrame(transactions)
-df["Date"] = pd.date_range("2020-01-01", periods=n_transactions, freq="h")[
-    :n_transactions
-]
-df["Quarter"] = df["Date"].dt.quarter
-df["Year"] = df["Date"].dt.year
-
-print(f"Dataset shape: {df.shape}")
-print(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-print("\nSample Data:")
-print(df.head(10))
-print("\nBasic Statistics:")
-print(df.describe())
-```
-
-### Basic Pivot Table
+### Build the Visit Log
 
 ```python
-# Create basic pivot table
-print("=== Basic Pivot Table: Sales by Product and Region ===")
-pivot = pd.pivot_table(
-    df, values="Sales", index="Product", columns="Region", aggfunc="sum"
-)
-print("Sales by Product and Region:")
-print(pivot)
+rng = np.random.default_rng(42)
+n_visits = 100_000
+n_patients = 30_000
 
-# Visualize basic pivot table
-fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-# 1. Heatmap visualization
-im = axes[0].imshow(pivot.values, cmap="YlOrRd", aspect="auto")
-axes[0].set_xticks(range(len(pivot.columns)))
-axes[0].set_yticks(range(len(pivot.index)))
-axes[0].set_xticklabels(pivot.columns)
-axes[0].set_yticklabels(pivot.index)
-axes[0].set_title(
-    "Sales Heatmap: Product × Region", fontsize=14, fontweight="bold"
-)
-axes[0].set_xlabel("Region")
-axes[0].set_ylabel("Product")
-cbar = plt.colorbar(im, ax=axes[0])
-cbar.set_label("Total Sales ($)", rotation=270, labelpad=20)
-
-# Add text annotations
-for i in range(len(pivot.index)):
-    for j in range(len(pivot.columns)):
-        text = axes[0].text(
-            j,
-            i,
-            f"${pivot.iloc[i, j] / 1000:.0f}K",
-            ha="center",
-            va="center",
-            color="black",
-            fontsize=9,
-            fontweight="bold",
-        )
-
-# 2. Grouped bar chart
-pivot.plot(kind="bar", ax=axes[1], width=0.8)
-axes[1].set_title(
-    "Sales by Product and Region (Bar Chart)", fontsize=14, fontweight="bold"
-)
-axes[1].set_ylabel("Total Sales ($)")
-axes[1].set_xlabel("Product")
-axes[1].legend(title="Region", bbox_to_anchor=(1.05, 1), loc="upper left")
-axes[1].tick_params(axis="x", rotation=45)
-axes[1].grid(axis="y", alpha=0.3)
-
-plt.tight_layout()
-plt.show()
-```
-
-### Pivot Table with Multiple Aggregations
-
-```python
-# Pivot table with multiple aggregations
-print("=== Multiple Aggregations ===")
-pivot_multi = pd.pivot_table(
-    df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc=["sum", "mean", "count", "std"],
-)
-print("Multiple aggregations (sum, mean, count, std):")
-print(pivot_multi)
-
-# Visualize multiple aggregations
-fig, axes = plt.subplots(2, 2, figsize=(18, 12))
-
-# Extract each aggregation level
-pivot_sum = pivot_multi["sum"]
-pivot_mean = pivot_multi["mean"]
-pivot_count = pivot_multi["count"]
-pivot_std = pivot_multi["std"]
-
-# 1. Sum heatmap
-im1 = axes[0, 0].imshow(pivot_sum.values, cmap="YlOrRd", aspect="auto")
-axes[0, 0].set_xticks(range(len(pivot_sum.columns)))
-axes[0, 0].set_yticks(range(len(pivot_sum.index)))
-axes[0, 0].set_xticklabels(pivot_sum.columns)
-axes[0, 0].set_yticklabels(pivot_sum.index)
-axes[0, 0].set_title("Total Sales (Sum)", fontsize=12, fontweight="bold")
-axes[0, 0].set_xlabel("Region")
-axes[0, 0].set_ylabel("Product")
-plt.colorbar(im1, ax=axes[0, 0], label="Total Sales ($)")
-
-# 2. Mean heatmap
-im2 = axes[0, 1].imshow(pivot_mean.values, cmap="Blues", aspect="auto")
-axes[0, 1].set_xticks(range(len(pivot_mean.columns)))
-axes[0, 1].set_yticks(range(len(pivot_mean.index)))
-axes[0, 1].set_xticklabels(pivot_mean.columns)
-axes[0, 1].set_yticklabels(pivot_mean.index)
-axes[0, 1].set_title("Average Sales (Mean)", fontsize=12, fontweight="bold")
-axes[0, 1].set_xlabel("Region")
-axes[0, 1].set_ylabel("Product")
-plt.colorbar(im2, ax=axes[0, 1], label="Mean Sales ($)")
-
-# 3. Count heatmap
-im3 = axes[1, 0].imshow(pivot_count.values, cmap="Greens", aspect="auto")
-axes[1, 0].set_xticks(range(len(pivot_count.columns)))
-axes[1, 0].set_yticks(range(len(pivot_count.index)))
-axes[1, 0].set_xticklabels(pivot_count.columns)
-axes[1, 0].set_yticklabels(pivot_count.index)
-axes[1, 0].set_title("Transaction Count", fontsize=12, fontweight="bold")
-axes[1, 0].set_xlabel("Region")
-axes[1, 0].set_ylabel("Product")
-plt.colorbar(im3, ax=axes[1, 0], label="Count")
-
-# 4. Standard deviation heatmap (shows variability)
-im4 = axes[1, 1].imshow(pivot_std.values, cmap="Purples", aspect="auto")
-axes[1, 1].set_xticks(range(len(pivot_std.columns)))
-axes[1, 1].set_yticks(range(len(pivot_std.index)))
-axes[1, 1].set_xticklabels(pivot_std.columns)
-axes[1, 1].set_yticklabels(pivot_std.index)
-axes[1, 1].set_title(
-    "Sales Variability (Std Dev)", fontsize=12, fontweight="bold"
-)
-axes[1, 1].set_xlabel("Region")
-axes[1, 1].set_ylabel("Product")
-plt.colorbar(im4, ax=axes[1, 1], label="Std Dev ($)")
-
-plt.tight_layout()
-plt.show()
-```
-
-## Part 2: Advanced Pivot Operations
-
-### Pivot Table with Totals
-
-```python
-# Pivot table with totals
-print("=== Pivot Table with Totals ===")
-pivot_totals = pd.pivot_table(
-    df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc="sum",
-    margins=True,
-    margins_name="Total",
-)
-print("Sales with totals:")
-print(pivot_totals)
-```
-
-### Handling Missing Values
-
-```python
-# Create data with missing combinations
-data_missing = {
-    "Product": ["A", "A", "B", "B", "C"],
-    "Region": ["North", "South", "North", "South", "North"],
-    "Sales": [1000, 1500, 2000, 1200, 800],
-}
-
-df_missing = pd.DataFrame(data_missing)
-print("=== Handling Missing Values ===")
-print("Data with missing combinations:")
-print(df_missing)
-
-# Pivot with fill_value
-pivot_filled = pd.pivot_table(
-    df_missing,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc="sum",
-    fill_value=0,
-)
-print("\nPivot with filled missing values:")
-print(pivot_filled)
-```
-
-### Cross-Tabulation
-
-```python
-# Create large-scale categorical data for cross-tabulation
-print("=== Creating Large-Scale Categorical Dataset ===")
-np.random.seed(42)
-n_observations = 100000
-
-# Generate realistic categorical data with correlations
-genders = np.random.choice(["M", "F"], n_observations, p=[0.48, 0.52])
-age_groups = np.random.choice(
-    ["18-25", "26-35", "36-45", "46-55", "56-65", "65+"],
-    n_observations,
-    p=[0.15, 0.25, 0.20, 0.18, 0.12, 0.10],
-)
-education_levels = np.random.choice(
-    ["High School", "Bachelor", "Master", "PhD", "Associate"],
-    n_observations,
-    p=[0.30, 0.35, 0.20, 0.10, 0.05],
-)
-income_levels = np.random.choice(
-    ["Low", "Medium", "High"], n_observations, p=[0.40, 0.40, 0.20]
+# One age per patient; about 15% of patients are children
+patient_age = np.where(
+    rng.random(n_patients) < 0.15,
+    rng.integers(0, 18, n_patients),
+    rng.integers(18, 96, n_patients),
 )
 
-# Add correlation: Higher education tends to have higher income
-for i in range(n_observations):
-    if education_levels[i] in ["Master", "PhD"]:
-        income_levels[i] = np.random.choice(["Medium", "High"], p=[0.4, 0.6])
-    elif education_levels[i] == "High School":
-        income_levels[i] = np.random.choice(["Low", "Medium"], p=[0.7, 0.3])
-
-cat_df = pd.DataFrame({
-    "Gender": genders,
-    "Age_Group": age_groups,
-    "Education": education_levels,
-    "Income_Level": income_levels,
+# Each visit belongs to one patient; patients visit about three times each
+who = rng.integers(0, n_patients, n_visits)
+visits = pd.DataFrame({
+    "visit_id": [f"V{i:06d}" for i in range(1, n_visits + 1)],
+    "patient_id": [f"P{i:05d}" for i in who],
+    "age": patient_age[who],   # each visit gets its patient's age (fancy indexing, Lecture 03)
+    "clinic": rng.choice(["North", "South", "East", "West", "Central"], n_visits),
+    "visit_type": rng.choice(["New", "Follow-up"], n_visits, p=[0.3, 0.7]),
 })
 
-# Add purchase behavior correlated with demographics
-purchase_amounts = []
-for i in range(n_observations):
-    base = {"Low": 50, "Medium": 150, "High": 400}[income_levels[i]]
-    amount = np.random.exponential(base)
-    purchase_amounts.append(min(amount, 2000))
-
-cat_df["Purchase_Amount"] = purchase_amounts
-
-print(f"Dataset shape: {cat_df.shape}")
-print("\nSample categorical data:")
-print(cat_df.head(10))
-
-# Cross-tabulation: Gender × Age Group
-print("\n=== Cross-Tabulation: Gender × Age Group ===")
-crosstab = pd.crosstab(cat_df["Gender"], cat_df["Age_Group"], margins=True)
-print(crosstab)
-
-# Cross-tabulation with values: Gender × Income Level (sum of purchases)
-print("\n=== Cross-Tabulation with Values: Gender × Income Level ===")
-crosstab_values = pd.crosstab(
-    cat_df["Gender"],
-    cat_df["Income_Level"],
-    values=cat_df["Purchase_Amount"],
-    aggfunc="sum",
-    margins=True,
+# Children go to Pediatrics; adults to one of five adult departments
+adult_departments = ["Family Medicine", "Cardiology", "Orthopedics", "Endocrinology", "Dermatology"]
+visits["department"] = np.where(
+    visits["age"] < 18,
+    "Pediatrics",
+    rng.choice(adult_departments, n_visits, p=[0.40, 0.20, 0.17, 0.13, 0.10]),
 )
-print(crosstab_values)
 
-# Multi-dimensional cross-tabulation
-print("\n=== Multi-Dimensional Cross-Tabulation ===")
-crosstab_multi = pd.crosstab(
-    [cat_df["Gender"], cat_df["Age_Group"]], cat_df["Education"], margins=True
-)
-print("Gender × Age Group × Education:")
-print(crosstab_multi.head(15))
+# Typical wait (minutes) and its spread differ by department; walk-in Family Medicine varies most
+typical_wait = {"Orthopedics": 38, "Cardiology": 30, "Endocrinology": 26,
+                "Family Medicine": 22, "Dermatology": 18, "Pediatrics": 15}
+wait_spread = {"Orthopedics": 10, "Cardiology": 9, "Endocrinology": 8,
+               "Family Medicine": 14, "Dermatology": 6, "Pediatrics": 5}
+visits["wait_min"] = rng.normal(
+    visits["department"].map(typical_wait), visits["department"].map(wait_spread)
+).round()
+visits["wait_min"] = visits["wait_min"].clip(lower=0).astype(int)
 
-# Visualize cross-tabulations
-fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+# Systolic blood pressure (mmHg) rises with age
+visits["systolic_bp"] = rng.normal(100 + 0.5 * visits["age"], 14).round().astype(int)
 
-# 1. Gender × Age Group heatmap
-crosstab_no_margins = pd.crosstab(cat_df["Gender"], cat_df["Age_Group"])
-im1 = axes[0, 0].imshow(crosstab_no_margins.values, cmap="Blues", aspect="auto")
-axes[0, 0].set_xticks(range(len(crosstab_no_margins.columns)))
-axes[0, 0].set_yticks(range(len(crosstab_no_margins.index)))
-axes[0, 0].set_xticklabels(crosstab_no_margins.columns, rotation=45)
-axes[0, 0].set_yticklabels(crosstab_no_margins.index)
-axes[0, 0].set_title(
-    "Gender × Age Group Cross-Tabulation", fontsize=12, fontweight="bold"
-)
-axes[0, 0].set_xlabel("Age Group")
-axes[0, 0].set_ylabel("Gender")
-plt.colorbar(im1, ax=axes[0, 0], label="Count")
+# Satisfaction survey, 1 (poor) to 5 (excellent): longer waits, lower scores
+visits["satisfaction"] = (5.5 - visits["wait_min"] / 15 + rng.normal(0, 0.8, n_visits)).round()
+visits["satisfaction"] = visits["satisfaction"].clip(lower=1, upper=5)
+# About 3% of surveys were never returned
+visits.loc[rng.random(n_visits) < 0.03, "satisfaction"] = np.nan
 
-# Add text annotations
-for i in range(len(crosstab_no_margins.index)):
-    for j in range(len(crosstab_no_margins.columns)):
-        text = axes[0, 0].text(
-            j,
-            i,
-            f"{crosstab_no_margins.iloc[i, j]:,}",
-            ha="center",
-            va="center",
-            color="white",
-            fontsize=10,
-            fontweight="bold",
-        )
+print(visits.shape)
+print(f"Visits with no satisfaction survey: {visits['satisfaction'].isna().sum():,}")
+```
 
-# 2. Gender × Income Level (with purchase amounts)
-crosstab_purchases = pd.crosstab(
-    cat_df["Gender"],
-    cat_df["Income_Level"],
-    values=cat_df["Purchase_Amount"],
-    aggfunc="mean",
-)
-crosstab_purchases.plot(kind="bar", ax=axes[0, 1], width=0.8)
-axes[0, 1].set_title(
-    "Average Purchase Amount: Gender × Income Level",
-    fontsize=12,
-    fontweight="bold",
-)
-axes[0, 1].set_ylabel("Average Purchase Amount ($)")
-axes[0, 1].set_xlabel("Gender")
-axes[0, 1].legend(title="Income Level")
-axes[0, 1].tick_params(axis="x", rotation=0)
-axes[0, 1].grid(axis="y", alpha=0.3)
+**Expect:** `(100000, 9)` and 2,984 visits with no survey, the same log as Demo 1.
 
-# 3. Education × Income Level
-edu_income = pd.crosstab(
-    cat_df["Education"], cat_df["Income_Level"], margins=True
-)
-edu_income_no_margins = edu_income.drop("All").drop("All", axis=1)
-im3 = axes[1, 0].imshow(
-    edu_income_no_margins.values, cmap="YlOrRd", aspect="auto"
-)
-axes[1, 0].set_xticks(range(len(edu_income_no_margins.columns)))
-axes[1, 0].set_yticks(range(len(edu_income_no_margins.index)))
-axes[1, 0].set_xticklabels(edu_income_no_margins.columns)
-axes[1, 0].set_yticklabels(edu_income_no_margins.index)
-axes[1, 0].set_title(
-    "Education × Income Level Cross-Tabulation", fontsize=12, fontweight="bold"
-)
-axes[1, 0].set_xlabel("Income Level")
-axes[1, 0].set_ylabel("Education")
-plt.colorbar(im3, ax=axes[1, 0], label="Count")
+### Two Realities the Default Summary Hides
 
-# 4. Age Group distribution by Education (stacked bar)
-age_edu = pd.crosstab(cat_df["Age_Group"], cat_df["Education"])
-age_edu_pct = age_edu.div(age_edu.sum(axis=1), axis=0) * 100
-age_edu_pct.plot(kind="bar", ax=axes[1, 1], stacked=True, width=0.8)
-axes[1, 1].set_title(
-    "Education Distribution by Age Group (Percentage)",
-    fontsize=12,
-    fontweight="bold",
-)
-axes[1, 1].set_ylabel("Percentage (%)")
-axes[1, 1].set_xlabel("Age Group")
-axes[1, 1].legend(title="Education", bbox_to_anchor=(1.05, 1), loc="upper left")
-axes[1, 1].tick_params(axis="x", rotation=45)
-axes[1, 1].grid(axis="y", alpha=0.3)
+```python
+# Work on a copy so `visits` stays unchanged for Parts 2-4
+reported = visits.copy()
 
+# 1. Some visits were logged without a clinic (sample, Lecture 05, picks the same 250 every run)
+unrecorded = reported.sample(n=250, random_state=8).index
+reported.loc[unrecorded, "clinic"] = None
+
+# 2. Bayview opened this quarter and has not seen a patient yet
+reporting_order = ["North", "South", "East", "West", "Central", "Bayview"]
+
+print(f"Rows: {len(reported):,}")
+print(f"Visits with no clinic recorded: {reported['clinic'].isna().sum()}")
+print(f"Clinics named in the report: {len(reporting_order)}")
+print(f"Clinics present in the data: {reported['clinic'].nunique()}")
+```
+
+**Expect:** 100,000 rows, 250 visits with no clinic, 6 clinics in the report, and 5 in the data. A default `groupby` shows five groups and says nothing about the rest.
+
+### Missing Keys: `dropna`
+
+```python
+# The default drops rows whose key is missing, before the split
+default_counts = reported.groupby("clinic")["wait_min"].count()
+kept_counts = reported.groupby("clinic", dropna=False)["wait_min"].count()
+
+print("=== Default: dropna=True ===")
+print(default_counts)
+print(f"Visits counted: {default_counts.sum():,} of {len(reported):,}")
+
+print("\n=== dropna=False ===")
+print(kept_counts)
+print(f"Visits counted: {kept_counts.sum():,} of {len(reported):,}")
+```
+
+**Expect:** the default report counts 99,750 of 100,000 visits across five clinics, with no warning that 250 are missing. `dropna=False` keeps them as a `NaN` group, listed last, so the counts add up to 100,000 and someone can go find the missing clinic names.
+
+### Reporting Order and Empty Groups: `pd.Categorical` and `observed`
+
+```python
+# Declare the allowed values and the order the report should use
+reported["clinic"] = pd.Categorical(reported["clinic"], categories=reporting_order, ordered=True)
+
+present_only = reported.groupby("clinic", observed=True, dropna=False)["wait_min"].agg(["count", "mean"])
+every_clinic = reported.groupby("clinic", observed=False, dropna=False)["wait_min"].agg(["count", "mean"])
+
+print("=== observed=True: only clinics with visits ===")
+print(present_only.round(1))
+print("\n=== observed=False: every declared clinic ===")
+print(every_clinic.round(1))
+```
+
+**Expect:** both tables follow the declared order (North, South, East, West, Central) instead of alphabetical order, and both keep the `NaN` group last because of `dropna=False`. Only the second shows Bayview, with a count of `0` and a mean of `NaN`: no waits to average is not a mean wait of zero.
+
+### The Same Choices in a Pivot Table
+
+```python
+# Counts: an empty clinic gives 0, which is a real value
+counts_kept = pd.pivot_table(reported, values="wait_min", index="clinic", columns="department",
+                             aggfunc="count", observed=False, dropna=False, fill_value=0)
+print("=== Visit counts, dropna=False ===")
+print(counts_kept)
+print("Rows:", len(counts_kept))
+
+counts_default = pd.pivot_table(reported, values="wait_min", index="clinic", columns="department",
+                                aggfunc="count", observed=False, dropna=True, fill_value=0)
+print("\n=== Visit counts, dropna=True ===")
+print(counts_default)
+print("Rows:", len(counts_default))
+```
+
+**Expect:** 7 rows with `dropna=False`: the five open clinics, Bayview with six zeros, and the `NaN` group. The `NaN` row comes first here, not last: with a categorical key, `observed=False`, and a `columns=` key, `pivot_table` puts it at the top, so find that row by its label, not by its position. With `dropna=True`, 6 rows: the `NaN` group goes, but Bayview stays, because a count of `0` is a value, not a missing one.
+
+```python
+# Means: an empty clinic gives NaN in every cell, and dropna=True removes all-NaN rows
+means_default = pd.pivot_table(reported, values="wait_min", index="clinic", columns="department",
+                               aggfunc="mean", observed=False, dropna=True)
+print("=== Mean wait, dropna=True ===")
+print(means_default.round(1))
+print("Rows:", len(means_default))
+
+means_kept = pd.pivot_table(reported, values="wait_min", index="clinic", columns="department",
+                            aggfunc="mean", observed=False, dropna=False)
+print("\n=== Mean wait, dropna=False ===")
+print(means_kept.round(1))
+print("Rows:", len(means_kept))
+```
+
+**Expect:** 5 rows with `dropna=True`: the `NaN` group goes because its key is missing, and Bayview goes because all six of its cells are `NaN`. With `dropna=False`, 7 rows. The `NaN` row, again at the top, is not empty: six real means, from 16.5 minutes in Pediatrics to 38.6 in Orthopedics, computed from the 250 visits the default report never mentions.
+
+### Show the Difference
+
+```python
+# Every group the data can produce, from the observed=False, dropna=False table above
+full_counts = every_clinic["count"]
+# One label and color per row, in the same order; red marks the two the default report hides
+labels = ["North", "South", "East", "West", "Central", "Bayview", "(not recorded)"]
+colors = ["steelblue", "steelblue", "steelblue", "steelblue", "steelblue", "red", "red"]
+
+fig, ax = plt.subplots(figsize=(9, 4))
+bars = ax.bar(labels, full_counts, color=colors)
+ax.bar_label(bars)
+ax.set_title("Visits per clinic; red bars are missing from the default report")
+ax.set_ylabel("Visits counted")
 plt.tight_layout()
 plt.show()
 ```
 
-## Part 3: Real-world Analysis
+**Expect:** five blue bars of about 20,000 visits each, then Bayview labelled `0` with no bar at all and a thin red bar labelled `250` for the visits with no clinic. Neither would appear in a default report, and neither is easy to see even here, which is why a report needs `observed=False` and `dropna=False` to list them.
 
-### Sales Performance Analysis
+## Part 2: Transform Keeps Every Row
 
-```python
-# Use the comprehensive dataset we already created
-sales_df = df.copy()
-print("=== Sales Performance Analysis ===")
-print(f"Using dataset with {len(sales_df):,} transactions")
-print("\nSample sales data:")
-print(sales_df.head())
-```
+`transform` computes a statistic per group and copies it back to every row of that group, so the result has the same length and index as the input and can become a new column. The rest of the demo uses `visits`, which still has every clinic recorded.
 
-### Monthly Sales by Product and Region
+### Intentional Mistake: Attaching a Summary to Rows
 
 ```python
-# Monthly sales pivot table
-print("=== Monthly Sales by Product ===")
-monthly_pivot = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Month",
-    aggfunc="sum",
-    margins=True,
-    margins_name="Total",
-)
-print("Monthly sales by product:")
-print(monthly_pivot.head(10))
+# A per-department summary has 6 rows, labeled by department
+dept_mean = visits.groupby("department")["wait_min"].mean()
 
-# Visualize monthly trends
-fig, axes = plt.subplots(2, 1, figsize=(16, 10))
-
-# 1. Monthly sales trend by product (line plot)
-monthly_pivot_no_total = monthly_pivot.drop("Total", axis=1).drop(
-    "Total", axis=0
-)
-monthly_pivot_no_total.T.plot(ax=axes[0], marker="o", linewidth=2, markersize=5)
-axes[0].set_title(
-    "Monthly Sales Trends by Product", fontsize=14, fontweight="bold"
-)
-axes[0].set_ylabel("Total Sales ($)")
-axes[0].set_xlabel("Month")
-axes[0].legend(title="Product", bbox_to_anchor=(1.05, 1), loc="upper left")
-axes[0].grid(alpha=0.3)
-axes[0].tick_params(axis="x", rotation=45)
-
-# 2. Monthly sales heatmap
-monthly_pivot_no_total_values = monthly_pivot_no_total.values
-im = axes[1].imshow(monthly_pivot_no_total_values, cmap="YlGnBu", aspect="auto")
-axes[1].set_xticks(range(len(monthly_pivot_no_total.columns)))
-axes[1].set_yticks(range(len(monthly_pivot_no_total.index)))
-axes[1].set_xticklabels(monthly_pivot_no_total.columns, rotation=45)
-axes[1].set_yticklabels(monthly_pivot_no_total.index)
-axes[1].set_title(
-    "Monthly Sales Heatmap by Product", fontsize=14, fontweight="bold"
-)
-axes[1].set_xlabel("Month")
-axes[1].set_ylabel("Product")
-plt.colorbar(im, ax=axes[1], label="Total Sales ($)")
-
-plt.tight_layout()
-plt.show()
+wrong = visits.copy()
+wrong["dept_mean_wait"] = dept_mean
+print(wrong[["department", "wait_min", "dept_mean_wait"]].head())
+print("Missing values in the new column:", wrong["dept_mean_wait"].isna().sum())
 ```
 
-### Salesperson Performance Analysis
+**Expect:** every `dept_mean_wait` is `NaN` (100,000 missing), with no error. The summary's labels are department names and the visits are labeled 0 to 99,999, so nothing lines up. The fix is `transform`, next.
+
+### Add Department Context to Every Visit
 
 ```python
-# Multi-dimensional pivot: Product × Region × Category
-print("=== Multi-Dimensional Pivot Analysis ===")
+by_dept = visits.groupby("department")["wait_min"]
+visits["dept_mean_wait"] = by_dept.transform("mean")
+visits["dept_sd_wait"] = by_dept.transform("std")
+visits["wait_vs_dept"] = visits["wait_min"] - visits["dept_mean_wait"]
+visits["wait_z"] = visits["wait_vs_dept"] / visits["dept_sd_wait"]
 
-# 1. Product × Region × Category
-product_region_category = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns=["Region", "Category"],
-    aggfunc="sum",
-    margins=True,
-    margins_name="Total",
-)
-print("Sales by Product × Region × Category:")
-print(product_region_category.head(10))
+# The same z-score with a lambda: the function receives one department's waits at a time
+z_lambda = by_dept.transform(lambda x: (x - x.mean()) / x.std())
 
-# 2. Channel × Region performance
-channel_region = pd.pivot_table(
-    sales_df,
-    values=["Sales", "Quantity"],
-    index="Channel",
-    columns="Region",
-    aggfunc={"Sales": "sum", "Quantity": "sum"},
-    margins=True,
-)
-print("\nChannel performance by region:")
-print(channel_region)
-
-# Visualize multi-dimensional analysis
-fig, axes = plt.subplots(2, 2, figsize=(18, 12))
-
-# 1. Product × Category heatmap (aggregated across regions)
-product_category = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Category",
-    aggfunc="sum",
-)
-im1 = axes[0, 0].imshow(product_category.values, cmap="YlOrRd", aspect="auto")
-axes[0, 0].set_xticks(range(len(product_category.columns)))
-axes[0, 0].set_yticks(range(len(product_category.index)))
-axes[0, 0].set_xticklabels(product_category.columns)
-axes[0, 0].set_yticklabels(product_category.index)
-axes[0, 0].set_title(
-    "Sales by Product × Category", fontsize=12, fontweight="bold"
-)
-axes[0, 0].set_xlabel("Category")
-axes[0, 0].set_ylabel("Product")
-plt.colorbar(im1, ax=axes[0, 0], label="Total Sales ($)")
-
-# 2. Channel performance by region (grouped bar)
-channel_region_sales = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Channel",
-    columns="Region",
-    aggfunc="sum",
-)
-channel_region_sales.plot(kind="bar", ax=axes[0, 1], width=0.8)
-axes[0, 1].set_title(
-    "Channel Performance by Region", fontsize=12, fontweight="bold"
-)
-axes[0, 1].set_ylabel("Total Sales ($)")
-axes[0, 1].set_xlabel("Channel")
-axes[0, 1].legend(title="Region")
-axes[0, 1].tick_params(axis="x", rotation=0)
-axes[0, 1].grid(axis="y", alpha=0.3)
-
-# 3. Quarterly sales by product
-quarterly_product = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Quarter",
-    aggfunc="sum",
-)
-quarterly_product.plot(kind="bar", ax=axes[1, 0], width=0.8)
-axes[1, 0].set_title(
-    "Quarterly Sales by Product", fontsize=12, fontweight="bold"
-)
-axes[1, 0].set_ylabel("Total Sales ($)")
-axes[1, 0].set_xlabel("Product")
-axes[1, 0].legend(title="Quarter")
-axes[1, 0].tick_params(axis="x", rotation=45)
-axes[1, 0].grid(axis="y", alpha=0.3)
-
-# 4. Product × Region stacked bar (showing proportions)
-product_region_prop = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc="sum",
-)
-product_region_prop_pct = (
-    product_region_prop.div(product_region_prop.sum(axis=1), axis=0) * 100
-)
-product_region_prop_pct.plot(kind="bar", ax=axes[1, 1], stacked=True, width=0.8)
-axes[1, 1].set_title(
-    "Sales Distribution by Region (Percentage)", fontsize=12, fontweight="bold"
-)
-axes[1, 1].set_ylabel("Percentage (%)")
-axes[1, 1].set_xlabel("Product")
-axes[1, 1].legend(title="Region")
-axes[1, 1].tick_params(axis="x", rotation=45)
-axes[1, 1].grid(axis="y", alpha=0.3)
-
-plt.tight_layout()
-plt.show()
+print(visits[["department", "wait_min", "dept_mean_wait", "wait_vs_dept", "wait_z"]].head().round(2))
+print("\nRows:", len(visits))
+print("Same index as visits?", z_lambda.index.equals(visits.index))
+print("Largest difference between the two z-scores:", (visits["wait_z"] - z_lambda).abs().max())
 ```
 
-### Product Performance by Region
+**Expect:** the first five visits with their department's mean, the difference, and the z-score; row 0 is a 28-minute Family Medicine wait, 5.70 minutes above that department's 22.30, so `wait_z` is 0.43. Then `Rows: 100000`, `True`, and a difference of about `6e-15`: the two z-scores agree to rounding error. `transform` added columns; it did not summarize.
 
 ```python
-# Product performance by region
-product_pivot = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc=["sum", "mean", "count"],
-    margins=True,
-)
-print("Product performance by region:")
-print(product_pivot)
+# The same 30-minute wait, measured against each department's own waits
+thirty = visits[visits["wait_min"] == 30]
+print(thirty.groupby("department")["wait_z"].mean().round(2))
 ```
 
-## Part 4: Visualization with Pivot Tables
+**Expect:** the same 30-minute wait is ordinary in Cardiology (z = 0.01), about 3 standard deviations above the Pediatrics mean (2.99), and shorter than usual in Orthopedics (-0.8). Group context changes what one number means.
 
-### Heatmap Visualization
+### Quartiles Within Each Department
 
 ```python
-# Create heatmap from pivot table
-pivot_heatmap = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc="sum",
+# qcut (Lecture 05) inside transform: quartiles of each department's own waits
+visits["wait_quartile"] = by_dept.transform(
+    lambda x: pd.qcut(x, q=4, labels=["Q1", "Q2", "Q3", "Q4"])
 )
-
-# Create heatmap
-fig, ax = plt.subplots(figsize=(10, 6))
-im = ax.imshow(pivot_heatmap.values, cmap="YlOrRd", aspect="auto")
-
-# Set ticks and labels
-ax.set_xticks(range(len(pivot_heatmap.columns)))
-ax.set_yticks(range(len(pivot_heatmap.index)))
-ax.set_xticklabels(pivot_heatmap.columns)
-ax.set_yticklabels(pivot_heatmap.index)
-
-# Add colorbar
-plt.colorbar(im, ax=ax, label="Total Sales ($)")
-
-# Add title and labels
-plt.title("Sales Heatmap: Product vs Region", fontsize=14, fontweight="bold")
-plt.xlabel("Region")
-plt.ylabel("Product")
-
-# Add text annotations
-for i in range(len(pivot_heatmap.index)):
-    for j in range(len(pivot_heatmap.columns)):
-        text = ax.text(
-            j,
-            i,
-            f"${pivot_heatmap.iloc[i, j] / 1000:.0f}K",
-            ha="center",
-            va="center",
-            color="black",
-            fontsize=9,
-            fontweight="bold",
-        )
-
-plt.tight_layout()
-plt.show()
+print(pd.crosstab(visits["department"], visits["wait_quartile"], margins=True))
 ```
 
-### Bar Chart from Pivot Table
+**Expect:** each department split into Q1 to Q4 by its own waits, with row totals equal to its visit counts and 100,000 in the corner. The quarters are not exactly equal (Pediatrics Q1 has 4,628 visits, Q3 has 3,153) because many visits share the same whole-minute wait, and tied waits always land in the same quartile.
+
+## Part 3: Filter Keeps or Drops Whole Groups
+
+`filter` tests each whole group and keeps every row of the groups that pass. Rows are never changed, only kept or dropped.
+
+### Keep Only the Departments That Qualify
 
 ```python
-# Create bar chart from pivot table
-pivot_bar = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc="sum",
-)
+by_department = visits.groupby("department")
 
-# Create bar chart
-pivot_bar.plot(kind="bar", figsize=(12, 6))
-plt.title("Sales by Product and Region", fontsize=14, fontweight="bold")
-plt.xlabel("Product")
-plt.ylabel("Total Sales ($)")
-plt.legend(title="Region")
-plt.xticks(rotation=45)
-plt.grid(axis="y", alpha=0.3)
-plt.tight_layout()
-plt.show()
+# Departments with at least 15,000 visits
+busy = by_department.filter(lambda g: len(g) >= 15_000)
+print(f"At least 15,000 visits: {len(busy):,} rows, departments {sorted(busy['department'].unique())}")
+
+# Departments whose mean wait is over 25 minutes
+slow = by_department.filter(lambda g: g["wait_min"].mean() > 25)
+print(f"Mean wait over 25 min:  {len(slow):,} rows, departments {sorted(slow['department'].unique())}")
+
+# Departments whose waits vary the most (standard deviation over 9.5 minutes)
+variable = by_department.filter(lambda g: g["wait_min"].std() > 9.5)
+print(f"Wait SD over 9.5 min:   {len(variable):,} rows, departments {sorted(variable['department'].unique())}")
+
+# Checkpoint: the kept rows are the original rows, unchanged
+print("\nRows unchanged?", busy.equals(visits.loc[busy.index]))
 ```
 
-## Part 5: Advanced Pivot Operations
+**Expect:** only Family Medicine and Cardiology have 15,000 or more visits (51,310 rows); Pediatrics, at 14,672, just misses. Cardiology, Endocrinology, and Orthopedics average over 25 minutes (42,724 rows). Family Medicine and Orthopedics have the most variable waits (48,659 rows). Then `True`: `filter` returns the original rows of the passing groups, not one row per group.
 
-### Custom Aggregation Functions
+## Part 4: Apply Runs Your Own Function per Group
+
+`apply` hands each group to your function as a small DataFrame and stitches the results together. Use it when no built-in aggregation fits; it is the slowest of the four, and its output shape depends on what your function returns.
+
+### A Custom Summary per Department
 
 ```python
-# Custom aggregation function
-def sales_range(series):
-    return series.max() - series.min()
+def wait_summary(group):
+    """Summarize one department's waits (minutes) as a Series."""
+    q25 = group["wait_min"].quantile(0.25)
+    q75 = group["wait_min"].quantile(0.75)
+    return pd.Series({
+        "visits": len(group),
+        "median": group["wait_min"].median(),
+        "q25": q25,
+        "q75": q75,
+        "iqr": q75 - q25,
+        "over_60_min": (group["wait_min"] > 60).sum(),
+    })
 
+dept_summary = visits.groupby("department").apply(wait_summary, include_groups=False)
+print(dept_summary)
 
-# Pivot table with custom function
-custom_pivot = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc=sales_range,
-)
-print("=== Custom Aggregation ===")
-print("Sales range by product and region:")
-print(custom_pivot)
+# Checkpoint: the medians match the built-in aggregation
+builtin = visits.groupby("department")["wait_min"].median()
+print("\nSame medians as agg('median')?", dept_summary["median"].equals(builtin))
 ```
 
-### Pivot Table with Multiple Values
+**Expect:** one row per department, like `agg`, with the columns your function named. Every number prints with `.0` because a `Series` that holds a median stores all its values as floats. Family Medicine has the widest interquartile range (18 minutes) and Orthopedics the most waits over an hour (187). Then `True`.
+
+### The Longest Waits in Each Department
 
 ```python
-# Pivot table with multiple value columns
-multi_value_pivot = pd.pivot_table(
-    sales_df,
-    values=["Sales", "Quantity"],
-    index="Product",
-    columns="Region",
-    aggfunc={"Sales": "sum", "Quantity": "mean"},
+longest = visits.groupby("department").apply(
+    lambda g: g.nlargest(2, "wait_min"), include_groups=False
 )
-print("=== Multiple Value Columns ===")
-print("Sales and quantity by product and region:")
-print(multi_value_pivot)
+print(longest[["patient_id", "clinic", "wait_min"]])
+print("\nRows:", len(longest))
 ```
 
-### Reshaping Pivot Results
-
-```python
-# Reshape pivot table results
-pivot_reshaped = pd.pivot_table(
-    sales_df,
-    values="Sales",
-    index="Product",
-    columns="Region",
-    aggfunc="sum",
-)
-
-# Stack and unstack operations
-stacked = pivot_reshaped.stack()
-print("=== Reshaping Operations ===")
-print("Stacked pivot table:")
-print(stacked.head(10))
-
-# Unstack back to wide format
-unstacked = stacked.unstack()
-print("\nUnstacked back to wide format:")
-print(unstacked)
-```
-
-## Key Takeaways
-
-1. **Pivot Tables**: Transform long-format data to wide-format summaries
-2. **Multiple Aggregations**: Use different functions for different insights
-3. **Totals and Margins**: Add row and column totals for comprehensive analysis
-4. **Missing Values**: Handle missing combinations with fill_value
-5. **Cross-Tabulation**: Analyze categorical data relationships
-6. **Visualization**: Create heatmaps and charts from pivot tables
-7. **Custom Functions**: Apply business-specific aggregation logic
-
-## Next Steps
-
-- Practice with your own datasets
-- Experiment with different aggregation functions
-- Continue with advanced pivot-table and MultiIndex topics in the bonus material
+**Expect:** 12 rows: the two longest waits in each department, with the department as the outer index level and each visit's original row number as the inner one. Family Medicine's longest wait was 80 minutes. When the function returns whole rows, `apply` returns rows; when it returns one `Series` per group, it returns one row per group. When `agg` or `transform` can do the job, prefer them: they run as compiled code instead of once per group.

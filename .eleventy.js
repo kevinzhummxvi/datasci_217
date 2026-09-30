@@ -32,7 +32,7 @@ function renderedSourceLink(url, sourcePath) {
   if (excludedContent.test(repositoryPath)) {
     return `${repositoryUrl}/blob/main/${repositoryPath}${suffix}`;
   }
-  const coursePages = { "index.md": "", "references.md": "references/", "shell_workout.md": "shell-workout/" };
+  const coursePages = { "index.md": "", "references.md": "references/", "shell_workout.md": "shell-workout/", "wsl_troubleshooting.md": "wsl-troubleshooting/" };
   let pagePath = coursePages[repositoryPath] ?? repositoryPath.replace(/\/README\.md$/i, "/");
   pagePath = pagePath.replace(/\/BONUS\.md$/i, "/bonus/");
   const outputPath = pagePath === repositoryPath ? repositoryPath : pagePath;
@@ -46,8 +46,23 @@ module.exports = function (eleventyConfig) {
     markdownLibrary.use(markdownItAnchor, { slugify: markdownHeadingSlug });
   });
 
+  // Notion's callout and column blocks are tab-indented tags in the source; turn
+  // them into HTML whose inner Markdown still renders on the site.
+  eleventyConfig.addPreprocessor("notion-blocks", "md", (data, content) => {
+    const dedent = (text) => text.split("\n").map((line) => line.replace(/^\t+/, "")).join("\n").trim();
+    return content
+      .replace(/^<callout[^>]*>\n([\s\S]*?)\n<\/callout>$/gm,
+        (_, inner) => `<aside class="callout">\n\n${dedent(inner)}\n\n</aside>`)
+      .replace(/^<columns>\n([\s\S]*?)\n<\/columns>$/gm, (_, inner) => {
+        const columns = [...inner.matchAll(/<column(?:\s+ratio="([\d.]+)")?[^>]*>\n([\s\S]*?)\n\t*<\/column>/g)]
+          .map(([, ratio, body]) => `<div class="column" style="flex: ${ratio || 1}">\n\n${dedent(body)}\n\n</div>`);
+        return `<div class="columns">\n\n${columns.join("\n\n")}\n\n</div>`;
+      });
+  });
+
   // Passthrough copy — media folders and CSS
   eleventyConfig.addPassthroughCopy("css");
+  eleventyConfig.addPassthroughCopy("media/wsl-troubleshooting");
   eleventyConfig.addPassthroughCopy("*/media/**");
   eleventyConfig.addPassthroughCopy("*/assignment/media/**");
 
@@ -59,6 +74,17 @@ module.exports = function (eleventyConfig) {
     if (!sourcePath) return content;
     return content.replace(/((?:href|src)=["'])([^"']+)(["'])/gi, (_, prefix, url, quote) => {
       return `${prefix}${renderedSourceLink(url, sourcePath)}${quote}`;
+    });
+  });
+
+  // Notion turns an image's link text into the picture's caption; render the
+  // same text as a figcaption so a standalone image reads the same on the site.
+  eleventyConfig.addTransform("image-captions", function (content, outputPath) {
+    if (!outputPath || !outputPath.endsWith(".html")) return content;
+    return content.replace(/<p>(<img\b[^>]*>)<\/p>/gi, (paragraph, image) => {
+      const alt = image.match(/\balt=(["'])(.*?)\1/i);
+      if (!alt || !alt[2].trim()) return paragraph;
+      return `<figure>${image}<figcaption>${alt[2]}</figcaption></figure>`;
     });
   });
 

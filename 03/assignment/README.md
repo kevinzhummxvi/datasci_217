@@ -1,286 +1,210 @@
-# Assignment 03: Reproducible Terminal NumPy Analysis
+# Assignment 03: Telemetry Ward Analysis with NumPy
 
 ## Files
 
 ```text
-assignment/
-├── .python-version, requirements.txt  # environment records to complete
-├── PIPELINE.md                        # command scaffold to complete
-├── array_analysis.py, analysis.py     # Python scaffolds to complete
-├── observations.csv                   # supplied input; keep unchanged
-├── environment_check.py, data_loader.py # supplied helpers; keep unchanged
-├── .gitignore, check_assignment.py     # supplied configuration/checker
-└── output/                            # generate and commit six text artifacts
+ds217-03/
+├── data/bp_readings.csv    # supplied readings; keep this file exactly as handed out
+├── analysis.py             # starter script: the CSV loader is written, the analysis is yours
+├── pyproject.toml          # supplied: the project's one direct dependency, numpy
+├── uv.lock                 # supplied: the exact versions `uv sync` installs
+├── check_assignment.py     # supplied: run it to check your work; keep unchanged
+├── grading.py, _public_checks.py  # supplied: the checks themselves; keep unchanged
+├── test_assignment.py, .github/  # supplied: run the checks on GitHub; keep unchanged
+├── .python-version         # you create in Task 1
+└── output/
+    ├── environment.txt             # you generate in Task 1
+    ├── record_count.txt            # you generate in Task 2
+    ├── monitor_counts_<timestamp>.txt  # you generate in Task 2, one file per run
+    └── vitals_summary.txt          # you generate in Task 3
 ```
 
-## Task 1: Record, verify, and recreate the environment
+## The data
 
-Work in `03/assignment` or its standalone repository with the Lecture 01 POSIX-style shell. In VS Code, sync `main`, finish outstanding changes, and use **Git: Create Branch** to create `feature/numpy-analysis`.
-
-Open **Terminal → New Terminal** in VS Code at the assignment directory. If you use a native terminal or WSL Ubuntu instead, first `cd` into the assignment directory.
-
-### 1.1 Record the environment
-
-Replace the single `TODO` line in `.python-version` with exactly:
+`data/bp_readings.csv` is one shift's export from a step-down unit. Each row is one patient: a patient id, the bedside monitor that recorded them, and 12 hourly automated systolic blood-pressure readings in mmHg.
 
 ```text
-3.13
+patient_id,monitor,sbp_h01,sbp_h02, ... ,sbp_h12
+P0001,M06,111,122, ... ,108
 ```
 
-Replace the single `TODO` line in `requirements.txt` with the only deliberate direct dependency:
+Leave this file exactly as it ships: the checks compare your answers with the ones the supplied file gives.
 
-```text
-numpy==2.3.3
-```
+## Setup
 
-The file records the project's direct dependency.
+Fork the assignment repository on GitHub and clone your fork the way Lecture 01 did: Command Palette → **Git: Clone**, paste your fork's URL, pick a folder, and open it. Then open **Terminal → New Terminal** in VS Code at the assignment directory (Ctrl+Shift+backtick, also Control on Mac). If you use a native terminal or WSL Ubuntu instead, `cd` into the assignment directory first. Run `ls data` and expect `bp_readings.csv`. This clone is a new repository, so before your first commit run Lecture 02's two `git config user.name "..."` and `git config user.email "..."` lines in this terminal, with your name and GitHub noreply email.
 
-> **Checkpoint — `.python-version`**
-> Save `3.13` with a final newline.
+Switch to `main`, select **Sync Changes** if Source Control shows it, and use **Git: Create Branch** to create `feature/numpy-analysis`. Work on that branch until the Submit section.
 
-> **Checkpoint — `requirements.txt`**
-> Save `numpy==2.3.3` with a final newline.
+> **Windows:** work in the **WSL: Ubuntu** window from Lecture 01's setup. Task 2 uses `tail`, `cut`, `sort`, `uniq`, and `wc`, which native PowerShell does not have. Git Bash also provides them; there the environment activates with `source .venv/Scripts/activate` instead, and you type `python` wherever these instructions say `python3`.
 
-### 1.2 Verify and recreate the environment
+## Task 1: Build and record the environment
 
-From the assignment directory, use uv to install/pin the interpreter, create the named local environment, activate it, install the direct requirement, and verify the selected interpreter:
+### 1.1 Create the environment
+
+The handout already lists numpy in `pyproject.toml` and records its exact version in `uv.lock`, so `uv sync` installs it, as in the lecture's "Recreate from the Records" snippet. Pin the course interpreter, create the project environment, activate it, and sync:
 
 ```bash
-uv python install 3.13
 uv python pin 3.13
-uv venv --python 3.13 .venv
+uv venv --seed
 source .venv/bin/activate
-uv pip install -r requirements.txt
-python --version
-python -c "import sys; print(sys.executable)"
-python environment_check.py > output/environment_check.txt
-cat output/environment_check.txt
+uv sync
 ```
 
-The exact saved probe is:
+`uv python pin` writes the `.python-version` file for you; commit it. `uv sync` prints `+ numpy==2.3.3` as it installs NumPy. Do not run `uv init`: the handout's `pyproject.toml` already exists.
+
+If `.venv` already exists, for example when you run these lines a second time, `uv venv` asks `Do you want to replace it? [y/n]`. Answer `n` to keep the environment you have: uv then stops with `error: Failed to create virtual environment`, which is harmless, and the next two lines work as before. Answering `y` gives a new, empty environment, so run `uv sync` again after it.
+
+> **Checkpoint: the environment**
+> With it active, `python3 -c "import numpy as np; print(np.__version__)"` prints `2.3.3`, the version `pyproject.toml` lists.
+
+### 1.2 Save an environment probe
+
+With the environment active, save three labelled lines to `output/environment.txt`:
 
 ```text
-Python: 3.13
-NumPy: 2.3.3
+python: <the version the active interpreter reports>
+numpy: <the version of numpy installed in it>
+interpreter: <the path to the active interpreter>
 ```
 
-> **Checkpoint — `output/environment_check.txt`**
-> Save the two version lines above.
-
-There is one newline after each line. Leave the environment and recreate it from only the committed records and supplied probe:
+Each line is a label, a colon, and the value. Command substitution from the lecture's "Shell Variables and Timestamps" card builds a labelled line from a command's output, and `>` starts the file while `>>` adds to it:
 
 ```bash
-deactivate
-mkdir recreation-check
-cp .python-version requirements.txt environment_check.py recreation-check/
-cd recreation-check
-uv venv --python 3.13 .venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
-python environment_check.py
-deactivate
-cd ..
+echo "python: $(python3 --version)" > output/environment.txt
 ```
 
-Both `.venv/` directories and `recreation-check/` are generated local state. Keep them ignored and out of your submission.
+Lecture 03 gives the one-line Python commands that print the installed NumPy version and the interpreter path. Quotes inside `$( )` belong to the command inside it, so a `python3 -c "..."` command goes inside `echo "numpy: $(...)"` unchanged.
 
-## Task 2: Complete and run the bounded terminal pipeline
+> **Checkpoint: `output/environment.txt`**
+> Three lines. With the environment active, the `numpy` line shows the version `pyproject.toml` lists and the `interpreter` line shows a path inside your project's `.venv`. The checks ask only for a version number on the `numpy` line and a path on the `interpreter` line; the `python` line is not graded.
 
-### 2.1 Complete the pipeline
+## Task 2: Count the dataset from the shell
 
-Replace the four `TODO` lines inside the fenced block in `PIPELINE.md` with these exact commands, in this order:
+Build both answers with a shell pipeline (`tail`, `cut`, `sort`, `uniq -c`, `wc -l`), not with Python. Demos 1.6 and 1.7 of the [Lecture 03 demo guide](https://github.com/christopherseaman/datasci_217/blob/main/03/demo/DEMO_GUIDE.md) count clinic encounters the same way.
 
-```bash
-head -n 3 observations.csv > output/head_preview.txt
-tail -n 2 observations.csv > output/tail_preview.txt
-tail -n +2 observations.csv | cut -d',' -f1 | sort | uniq -c > output/site_counts.txt
-wc -l output/site_counts.txt > output/site_count_lines.txt
-```
+### 2.1 How many patients are in the file?
 
-> **Checkpoint — `output/head_preview.txt`**
-> Save the first three fixture lines.
+Save the count of patient records to `output/record_count.txt`. The header line is not a patient record, so drop it before counting.
 
-> **Checkpoint — `output/tail_preview.txt`**
-> Save the last two fixture lines.
+> **Checkpoint: `output/record_count.txt`**
+> Holds the number of patient rows in `data/bp_readings.csv`. The checks read the first number in the file and the first number on its last line, so a bare count, a count with a word after it, and a title line above the count all work. Counting the whole CSV counts the header too, which is one too many.
 
-> **Checkpoint — `output/site_counts.txt`**
-> Save the three site counts shown below.
+### 2.2 How many patients did each monitor record?
 
-> **Checkpoint — `output/site_count_lines.txt`**
-> Save the `wc` result: `3 output/site_counts.txt` (spacing may vary).
-
-### 2.2 Run and inspect the results
-
-Run the four commands from the assignment directory. They preview the fixed input, remove its one-line header, select the site field, put equal site names next to one another, count adjacent equal names, and save the number of count lines.
-
-The fixture is deliberately bounded: it has one header, no quoted newlines, and no comma inside a field. `cut` is not a general CSV parser. `uniq -c` may pad counts differently on supported systems; after whitespace normalization, the saved count/name pairs must be:
+Count the patients per monitor and save the result under a name carrying the run's timestamp, so a second run keeps the first result instead of overwriting it:
 
 ```text
-3 north
-2 south
-1 west
+output/monitor_counts_YYYYMMDD_HHMMSS.txt
 ```
 
-Commit the four saved results. Count-column padding may vary by platform; the checker normalizes whitespace in the site counts and `wc` result.
+Capture the timestamp once into a shell variable and use it in the filename; the lecture's "Shell Variables and Timestamps" reference card gives the `date` format string that produces `YYYYMMDD_HHMMSS`, and Demo 1.7's `count_clinics.sh` saves its counts under a timestamped name the same way. Demo 1.6's script ends its pipeline with `| head -n 5` to keep its display short, but this file has six monitors, so leave that stage off or the last monitor goes missing.
 
-## Task 3: Implement the NumPy functions
+> **Checkpoint: `output/monitor_counts_<timestamp>.txt`**
+> Sits in `output/`, with a name that starts `monitor_counts` and carries the run timestamp; another timestamp layout, such as `monitor_counts_2026-09-26_15-30-00.txt`, also works. Holds one line per monitor with that monitor's count and its id, as `uniq -c` prints them. Spacing, separators such as `M01: 58`, and line order do not matter, and earlier timestamped runs may sit beside it.
 
-Complete the seven functions in `array_analysis.py`. Document their behavior and return the dictionaries or scalar described below, leaving inputs unchanged.
+## Task 3: Answer the ward's questions with NumPy
 
-### 3.1 create_and_describe(values)
+Blood pressure on this unit peaks at some point in the monitored shift, a share of patients average into stage 2 hypertension, and the staff suspect one bedside monitor reads high. `analysis.py` already loads the CSV into arrays; answer the questions below from those arrays and save the answers to `output/vitals_summary.txt`.
 
-Create `array = np.array(values, dtype=np.float64)` and return:
+Two definitions the questions use:
 
-```python
-{
-    "array": array,
-    "shape": array.shape,
-    "ndim": array.ndim,
-    "size": array.size,
-    "dtype": array.dtype,
-}
-```
+- A patient's **12-hour mean** is the mean of that patient's twelve readings: one number per patient, which is `readings.mean(axis=1)`.
+- A monitor's **average** is the mean of the 12-hour means of the patients it recorded. Every patient has twelve readings, so that is the same number as the mean of all of that monitor's readings.
 
-### 3.2 select_parts(values)
+To group patients by their monitor, use the lecture's "Select One Group by a Label" snippet: comparing a text array with one label, as in `monitors == "M01"`, builds a Boolean mask, and indexing another array with that mask keeps the values belonging to that group. The mask and the values it selects have to be the same length, so group an array holding one value per patient, the 12-hour means, with `monitors`, which also holds one value per patient. To name the monitor with the highest average, collect each monitor's average in a list in the order of `sorted(set(monitors))`, turn that list into an array with `np.array()`, and use its `argmax()` position to pick the name from the sorted list, as the lecture's "Find the Highest Values and Who Has Them" snippet does with `ids[avg_glucose.argmax()]`. Demo 3.4 names its highest-average clinic this way, then leaves that clinic out by flipping its mask with `~` to compare it with every other clinic.
 
-For a 2D ndarray with at least two rows and two columns, return selections made directly from `values`:
-
-```python
-{
-    "first_value": values[0, 0],
-    "second_row": values[1],
-    "second_column": values[:, 1],
-    "top_left_block": values[:2, :2],
-}
-```
-
-### 3.3 view_and_copy(values)
-
-Create `middle_view = values[1:3]` and `middle_copy = values[1:3].copy()`. Return both without mutating either result or `values` during the call:
-
-```python
-{"view": middle_view, "copy": middle_copy}
-```
-
-The returned view must share memory with the input. The returned copy must not share memory with the input or view.
-
-### 3.4 vector_operations(values, baseline, threshold, offset)
-
-The two array inputs are 1D and have the same shape; `threshold` and `offset` are scalars. Create one boolean `mask = values >= threshold`, select `values[mask]`, calculate `difference = values - baseline`, and apply the scalar broadcast `adjusted = values + offset`. Return:
-
-```python
-{
-    "mask": mask,
-    "selected": selected,
-    "difference": difference,
-    "adjusted": adjusted,
-}
-```
-
-### 3.5 reduction_summary(values)
-
-For a 2D ndarray, calculate `np.mean(values)`, `np.mean(values, axis=0)`, and `np.mean(values, axis=1)`. Return:
-
-```python
-{
-    "overall_mean": overall_mean,
-    "column_means": column_means,
-    "column_means_shape": column_means.shape,
-    "row_means": row_means,
-    "row_means_shape": row_means.shape,
-}
-```
-
-### 3.6 reshape_and_transpose(values, rows, columns)
-
-Create `grid = np.reshape(values, (rows, columns))`, then `transposed = grid.T`. Return:
-
-```python
-{
-    "grid": grid,
-    "grid_shape": grid.shape,
-    "transposed": transposed,
-    "transposed_shape": transposed.shape,
-}
-```
-
-### 3.7 count_at_or_above(values, threshold)
-
-Reshape the input to one dimension with `flattened = np.reshape(values, values.size)`. Create the scalar-comparison mask `flattened >= threshold` and return its count with `np.sum(...)`.
-
-### 3.8 Complete the driver
-
-Complete `analysis.py` using its supplied imports and main guard. Inside `main()`, in this order:
-
-1. call `load_measurements("observations.csv")` once;
-2. use the loaded array with all seven helpers;
-3. print the existing shape, dtype, reduction, and count summary;
-4. print the four selections, the vector-operation results, and the reshape/transposed arrays; and
-5. use a separate copy of the loaded data to print the view and copy before and after changing that copy's first middle value to `-99`.
-
-Use the values returned by the helpers for the displayed results.
-
-Running `python analysis.py` must print a readable transcript and capture it as `output/analysis.txt`. Start with the existing six summary lines, then print these labeled learning results in this order:
+Write one line per answer, a key, a colon, and the value, ending each write with `"\n"` as Lecture 02's `file.write(f"{result}\n")` does:
 
 ```text
-Measurements shape: (6, 2)
-Measurements dtype: float64
-Overall mean: 25.0
-Column means: [20. 30.]
-Row means: [15. 25. 35. 15. 25. 35.]
-Values at or above 30: 6
-First value: 10.0
-Second row: [20. 30.]
-Second column: [20. 30. 20. 20. 30. 40.]
-Top-left block: [[10. 20.]
- [20. 30.]]
-View before change: [[20. 30.]
- [30. 40.]]
-Copy before change: [[20. 30.]
- [30. 40.]]
-View after source change: [[-99.  30.]
- [ 30.  40.]]
-Copy after source change: [[20. 30.]
- [30. 40.]]
-Mask at or above 30: [False  True False False  True  True]
-Selected values: [30. 30. 40.]
-Difference from baseline: [10. 10. 10. 10. 10. 10.]
-Adjusted values: [25. 35. 45. 25. 35. 45.]
-Grid: [[10. 20. 20. 30.]
- [30. 40. 10. 20.]
- [20. 30. 30. 40.]]
-Transpose: [[10. 30. 20.]
- [20. 40. 30.]
- [20. 10. 30.]
- [30. 20. 40.]]
+patients: <whole number>
+mean_sbp: <number>
+high_monitor: <monitor id>
 ```
 
-> **Checkpoint — `output/analysis.txt`**
-> Run `python analysis.py > output/analysis.txt` to save the complete transcript above.
+| Key                     | The question it answers                                                                                   | Value                                | Points |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------ | -----: |
+| `patients`              | How many patients does the file describe?                                                                 | Whole number                         |      4 |
+| `readings`              | How many individual readings does it hold, counting every patient and every hour?                         | Whole number                         |      4 |
+| `mean_sbp`              | What is the mean of every reading in the file?                                                            | mmHg                                 |      3 |
+| `sd_sbp`                | What is the standard deviation of every reading?                                                          | mmHg                                 |      3 |
+| `min_sbp`               | What is the lowest single reading?                                                                        | Whole number of mmHg                 |      3 |
+| `max_sbp`               | What is the highest single reading?                                                                       | Whole number of mmHg                 |      3 |
+| `stage2_patients`       | How many patients have a 12-hour mean of 140 mmHg or higher?                                              | Whole number                         |      4 |
+| `highest_patient`       | Which patient has the highest 12-hour mean?                                                               | `patient_id` as written in the file  |      4 |
+| `highest_patient_mean`  | What is that patient's 12-hour mean?                                                                      | mmHg                                 |      4 |
+| `peak_hour_column`      | Which hour column has the highest mean across all patients?                                               | Column name as written in the header |      4 |
+| `peak_hour_mean`        | What is that column's mean?                                                                               | mmHg                                 |      4 |
+| `high_monitor`          | Which monitor's average is highest?                                                                       | Monitor id as written in the file    |      4 |
+| `monitor_offset`        | How far above the average of the patients on the _other_ monitors does that monitor's average sit?        | mmHg                                 |      3 |
+| `stage2_other_monitors` | Leaving out the patients on that monitor, how many of the rest have a 12-hour mean of 140 mmHg or higher? | Whole number                         |      3 |
+
+How the values are read:
+
+- Each answer is scored on its own, so a wrong value costs only its own points. `monitor_offset` and `stage2_other_monitors` are also accepted when they are right for the monitor your `high_monitor` line names, so a wrong `high_monitor` costs only its own points.
+- A number answer is read from the first number after the colon, so put the answer first and any note after it: `readings: 3600 (300 x 12)` reads 3600, but `readings: 300 x 12 = 3600` reads 300.
+- A number answer is one number, not an array. A line holding a printed array, such as `mean_sbp: [130.86666667 133.98333333 ...`, fails whatever its first number is: `readings.mean(axis=0)` gives one mean per hour column, and `mean_sbp` is the mean of every reading, which `readings.mean()` gives.
+- mmHg values are accepted within 0.6 of the value recomputed from the data, so one decimal or every digit NumPy prints passes, and so does a whole number, whether rounded with `:.0f` or cut short with `int()`. A trailing unit such as `mmHg` is ignored. Counts and whole-number readings must match exactly.
+- A NumPy scalar printed as `np.float64(121.5)` or `np.int64(96)` reads as the number inside it.
+- Either the population or the sample standard deviation is accepted; at this many readings they agree far inside the tolerance.
+- "140 mmHg or higher" includes a mean of exactly 140.
+- A patient id, column name, or monitor id may sit in quotes or brackets, as a one-item list prints it (`['M02']`), and may carry a note before or after it, as in `monitor M02` or `M02 (128.4 mmHg)`, as long as the line names no other id of the same kind.
+- Keys may appear in any order, spacing is free, a Markdown table row such as `| patients | 300 |` reads like `patients: 300`, and extra lines are ignored. When a key appears on more than one line, the first is read, so open the file with `"w"`, which replaces it on each run, rather than `"a"`.
+- A write without `"\n"` runs the next answer onto the same line, as in `patients: 300readings: 3600`. Each answer on such a line is read up to the next answer's key and still scored on its own, but end each write with `"\n"` so every answer gets its own line; a wrong answer on a joined line says so in its feedback.
+
+> **Checkpoint: `output/vitals_summary.txt`**
+> One `key: value` line for each of the 14 keys above, holding the answers your analysis computed from `data/bp_readings.csv`.
 
 ## Check your work
 
-With the candidate environment active, run:
+With the environment active, run your script and then the checks, from the assignment directory:
 
 ```bash
-python analysis.py
-python check_assignment.py
+python3 analysis.py
+python3 check_assignment.py
 ```
 
-A complete submission passes every check. Correct the named artifacts, regenerate them, and check again.
+`check_assignment.py` runs the same checks GitHub runs. They grade only your files in `output/` and recompute every answer from their own copy of the supplied `data/bp_readings.csv`. They never run or read your Python code, so any way of producing a correct artifact counts.
+
+Each check prints `PASS` or `FIX` and the points it earned, and a `FIX` says what to fix on the line beneath it. When the next checks need the same fix, such as a missing file, they say `(same fix as above)`. Before Task 1, for example, the first two checks report:
+
+```text
+[FIX ]   0/7   environment probe: numpy
+         output/environment.txt is missing. Save its three labelled lines with the Task 1.2 commands, then commit it.
+[FIX ]   0/6   environment probe: interpreter  (same fix as above)
+```
+
+Below the score, `Left to fix` lists the checks still failing, by file, and the points they are worth. Fix what they name, rerun whatever produces that artifact and then the checks, and repeat until every check passes. A clean local run ends with:
+
+```text
+[PASS]   4/4   answer: high_monitor
+[PASS]   3/3   answer: monitor_offset
+[PASS]   3/3   answer: stage2_other_monitors
+
+Score: 100/100
+All checks passed.
+```
+
+Every push also runs GitHub Actions, which downloads the course's current copy of the checks and reruns them on the files you committed and pushed. That run is what counts, and a check corrected after handout reaches you there on your next push.
 
 ### Completion contract
 
 Grading totals 100 points and reads these files relative to the assignment root.
 
-| Artifacts | Format and completion criteria | Points |
-|---|---|---:|
-| `.python-version`, `requirements.txt`, `output/environment_check.txt` | Exact environment records with final newlines and the two probe lines in Task 1. | 20 |
-| `output/head_preview.txt`, `output/tail_preview.txt`, `output/site_counts.txt`, `output/site_count_lines.txt` | UTF-8 text with the specified fixture previews, ordered site/count pairs, and `3 output/site_counts.txt`. Whitespace is normalized for counts and `wc` fields. | 40 |
-| `output/analysis.txt` | UTF-8 text with every transcript line shown in Task 3, in that order, including array spacing. | 40 |
+| Artifact                                | Complete when                                                                                                                            | Check                                                       | Points |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | -----: |
+| `output/environment.txt`                | Its `numpy` line holds a version number. Which version is not graded, and neither is the `python` line.                                  | environment probe: numpy                                    |      7 |
+| `output/environment.txt`                | Its `interpreter` line is not empty. Which interpreter is not graded.                                                                    | environment probe: interpreter                              |      6 |
+| `output/record_count.txt`               | It holds the number of patient records in the supplied CSV.                                                                              | record count artifact                                       |     10 |
+| `output/monitor_counts_<timestamp>.txt` | A counts file in `output/` has the run timestamp in its name.                                                                            | monitor counts: timestamped name                            |      3 |
+| `output/monitor_counts_<timestamp>.txt` | A counts file in `output/` holds that monitor's patient count.                                                                           | one check per monitor, named `monitor counts: M01` to `M06` |     12 |
+| `output/vitals_summary.txt`             | It has a readable `key: value` line for at least one key in Task 3's table. A missing or unreadable key costs only its own answer check. | summary artifact format                                     |     12 |
+| `output/vitals_summary.txt`             | Each of the 14 answers matches the supplied readings.                                                                                    | one check per key, named `answer: <key>`                    |     50 |
+
+Extra files and extra lines are ignored.
 
 ## Submit
 
-In VS Code Source Control, inspect and stage the environment records, `PIPELINE.md`, and all six output text files. Keep `.venv/` and `recreation-check/` ignored. Commit with `Record reproducible terminal workflow`. Inspect and stage `array_analysis.py` and `analysis.py`, then commit with `Implement NumPy array analysis`.
+In VS Code Source Control, stage `.python-version`, `analysis.py`, and everything in `output/`, including every timestamped counts file you kept. Commit with `Analyze telemetry ward readings`. Keep `.venv/` out of the commit; `.gitignore` already lists it.
 
-Publish or sync the branch. With no unfinished changes, switch to `main`, run **Git: Merge...**, and select `feature/numpy-analysis`. Resolve any unexpected conflict, inspect the resolution, and sync. Confirm the completed records, pipeline, six output files, and Python files on `main` in the repository browser. GitHub Actions runs the checks automatically on every push; enable Actions once if GitHub prompts you in a fork. If a required VS Code control is unavailable, record its message and contact the instructor.
+Publish or sync the branch. With no unfinished changes, switch to `main`, run **Git: Merge...**, and select `feature/numpy-analysis`. Resolve any unexpected conflict, inspect the resolution, and sync. Confirm the committed artifacts on `main` in the repository browser. GitHub Actions runs the checks automatically on every push; enable Actions once if GitHub prompts you in a fork. If a run cannot download the course's current checks, it grades with the copy in your repository and says so in its log. If your local run and the GitHub run ever disagree, the usual cause is a file in `output/` that was never committed and pushed: open `output/` on `main` in the repository browser, and stage, commit, and push any file missing there. Otherwise the difference is a check the course corrected after handout; the GitHub run counts, because it uses the course's current checks. If a required VS Code control is unavailable, record its message and contact the instructor.

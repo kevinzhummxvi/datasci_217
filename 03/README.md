@@ -9,294 +9,654 @@ notion:
 
 # NumPy Arrays & Virtual Environments
 
-Lecture 03 makes execution reproducible: create a known environment, then use it for NumPy-based numerical work. Lectures 01–03 use scripts and the terminal; notebooks begin in Lecture 04.
-
-**LIVE DEMO!**
+See [BONUS.md](BONUS.md) for the optional extensions.
 
 [Live Demo Guide](demo/DEMO_GUIDE.md)
 
+This lecture covers:
+
+- McKinney, _Python for Data Analysis_ (3rd ed.): 2.3 (`isinstance`, variables and argument passing, mutable and immutable objects), 3.1 (built-in sequence functions and list comprehensions), and 4.1 to 4.4 (NumPy arrays, random numbers, universal functions, and array-oriented programming)
+- Shotts, _The Linux Command Line_: Chapters 4 (wildcards), 6 (redirection, pipelines, and `grep`), 7 (command substitution), 19 (regular expressions, through anchors), 20 (text processing with `cut`, `sort`, and `uniq`), 24 (writing your first script), and 25 (shell variables)
+
 # Virtual Environments
 
-![xkcd 1987: Python Environment](media/xkcd_1987.png)
+![xkcd 1987: Python Environment. Virtual environments prevent package chaos](media/xkcd_1987.png)
 
-*Virtual environments prevent package chaos*
+A **virtual environment** is a project's own Python **interpreter** (the program that runs Python code) and installed **packages** (code such as NumPy), kept in a `.venv` folder in the project. Each project keeps the package versions it was written with, so updating one project cannot break another, and anyone can rebuild the environment from the project's records.
 
-## Why Virtual Environments?
+## Course Environment
 
-**The Problem:** Different projects need different package versions.
+- **Versions**:
+    - `python`: 3.13
+    - `numpy`: 2.3.3
+    - `pandas`: 3.0.5
+- **Environment**: one per project, in a folder named `.venv`
+- **Packages**: listed in `pyproject.toml`
+    - Lecture 02's `math` is part of Python's **standard library**, so it came preinstalled
+    - Other packages, such as `numpy`, work only after they are installed
+- **Tool**:
+    - `uv` and `pyproject.toml` will be used by default in this course
+    - Alternatives: `requirements.txt` instead of `pyproject.toml`, `python3 -m venv`, and Conda are touched on at the end of this topic
 
-- Project A needs pandas 1.3.0
-- Project B needs pandas 2.0.0
-- Installing one breaks the other!
-
-**The Solution:** Each project gets its own Python environment.
-
-## Lecture 03 candidate environment
-
-This lecture uses one tested course candidate:
-
-- CPython 3.13
-- a project environment stored in `.venv`
-- NumPy 2.3.3 as the core lecture examples' only direct Python dependency
-- a deliberate `requirements.txt` containing only `numpy==2.3.3`
-
-These versions define the tested candidate for this lecture's NumPy work, not a permanent dependency set for every later lecture. Later activities may add packages through their own recorded requirements. The primary setup below uses uv. The standard-library `venv` and Conda sections are alternatives for comparison; here they reproduce the same version, directory, and dependency contract rather than defining separate learning outcomes.
-
-## Reproducibility vocabulary
-
-A result is **reproducible** when another person can reconstruct the needed software environment and rerun the documented program with the same supplied inputs.
-
-### Interpreter
-
-The Python **interpreter** is the executable program that reads and runs Python code. Two terminals can resolve the command `python` to different interpreter files, so both version and location matter.
-
-Check the version:
-
-```bash
-python --version
-```
-
-After activation below, Python can report the exact interpreter path without a platform-specific shell command:
-
-```bash
-python -c "import sys; print(sys.executable)"
-```
-
-The `-c` option runs the short Python string that follows it.
-
-### Package, module, and dependency
-
-A **module** is a Python file that can be imported. A **package** is installable software that can provide one or more modules. NumPy is a package; code normally loads its top-level module with `import numpy`.
-
-A **dependency** is software a project needs in order to run.
-
-- A **direct dependency** is deliberately chosen by this project and imported by its Python code. NumPy is the only direct Python dependency used by the core lecture examples. The optional command-line supplement later in the lecture names separate tools that are not part of this candidate environment.
-- A **transitive dependency** is needed by a direct dependency rather than chosen directly by this project.
-
-A **requirements file** is a plain-text list of the direct packages a project deliberately needs. Record those dependencies in `requirements.txt`; do not generate that file from every package currently installed in an environment.
-
-A **lock artifact** records exact resolved direct and transitive versions for a tested release. When the course needs one, it is generated and reviewed separately from the deliberate direct-dependency list.
-
-For the candidate environment, create `requirements.txt` in VS Code with exactly:
-
-```text
-numpy==2.3.3
-```
-
-`==` pins the direct dependency to one exact candidate version. It can be changed later only as an intentional, tested course update.
-
-### Environment and activation
-
-An **environment** is the interpreter plus the packages available to it. A **virtual environment** is an isolated directory containing a project-specific Python command and package installation location.
-
-This course uses `.venv` as the environment directory. Add it to `.gitignore`:
-
-```gitignore
-.venv/
-```
-
-The environment is recreated from instructions and requirements; it is not synchronized through Git.
-
-**Activation** changes the current shell so `python` and installed commands resolve to the selected environment. Activation does not install a package and does not change Python source files.
-
-## Using uv (course candidate)
+## Using uv
 
 [uv documentation](https://docs.astral.sh/uv/)
 
-### Reference Card: uv environment workflow
+`uv venv --seed` creates `.venv` in the current folder. **Activation** switches the terminal to that environment, so `python3` runs the copy inside `.venv` and uv installs packages there:
+
+```text
+~/assignment-03 $ uv venv --seed
+Using CPython 3.13.14
+Creating virtual environment with seed packages at: .venv
+ + pip==26.2.1
+Activate with: source .venv/bin/activate
+~/assignment-03 $ source .venv/bin/activate
+(assignment-03) ~/assignment-03 $ python3 --version
+Python 3.13.14
+```
+
+<callout icon="⚠️" color="yellow_bg">
+	## Keep `.venv/` out of Git!
+	Add the line `.venv/` to the project's `.gitignore` (Lecture 02). The packages inside `.venv/` are built for one computer's operating system and hardware (macOS, Linux, or Windows; Intel, AMD, or Apple processors; with or without an Nvidia GPU), so they may not run anywhere else. Git keeps the project's records instead (below), and any computer rebuilds `.venv/` from them.
+</callout>
+
+### Reference Card: uv Environment Workflow
 
 | Task | Command | Result |
 | :--- | :--- | :--- |
-| Pin Python | `uv python pin 3.13` | Records the course interpreter version. |
-| Create environment | `uv venv --python 3.13 .venv` | Creates the project environment. |
-| Install requirements | `uv pip install -r requirements.txt` | Installs the deliberate direct dependencies. |
-| Verify | `python --version` and `python -c "import numpy as np; print(np.__version__)"` | Confirms Python and NumPy versions. |
+| Install Python | `uv python install 3.13 --default` | Installs 3.13; `python` and `python3` now run it (Lecture 01). |
+| Set the default Python | `uv python pin --global 3.13` | New environments use 3.13; `--default` alone sets only the `python` commands. |
+| Pin one project | `uv python pin 3.13` | Writes `.python-version`; `uv venv` in this folder uses it over the global pin. |
+| Create environment | `uv venv --seed` | Creates `.venv` with the pinned Python; `--seed` adds pip, which Lecture 04's notebooks use. |
+| Activate | `source .venv/bin/activate`<br>PowerShell: `.\.venv\Scripts\Activate.ps1`, then type `python` where this lecture says `python3` | The prompt starts with the folder name, such as `(assignment-03)`. |
+| Verify | `python3 --version` | The environment's Python version, such as `Python 3.13.14`. |
 | Leave environment | `deactivate` | Returns to the previous shell environment. |
 
-### Code Snippet: Create and verify the candidate environment
+## Recording Packages in `pyproject.toml`
+
+A **dependency** is a package a project needs. `pyproject.toml` is Python's standard project file and the course's record of dependencies: its `dependencies` list names the packages the project's code imports. `uv init --bare` writes the file, and `uv add` installs a package and adds it to the list:
+
+```toml
+[project]
+name = "clinic-project"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy==2.3.3",
+]
+```
+
+`uv add` also writes `uv.lock`, a **lock file** listing the exact version of every package the environment needs, including the packages your packages need, so a rebuild installs the same versions. Commit it beside `pyproject.toml` and leave its contents to uv.
+
+### Reference Card: `pyproject.toml` Projects
+
+| Task | Command | Result |
+| :--- | :--- | :--- |
+| Start a project | `uv init --bare` | Writes only `pyproject.toml`, for a project named after the folder; run it once per project. Plain `uv init` also adds `.python-version`, `README.md`, `.gitignore`, and a `src/` package folder, and starts a Git repository. |
+| Add a package | `uv add numpy==2.3.3` | Installs that version into `.venv`, lists it in `pyproject.toml`, and updates `uv.lock`. |
+| Rebuild from the records | `uv sync` | Makes `.venv` match `pyproject.toml` and `uv.lock`, removing packages you installed with `uv pip install` (the pip from `--seed` stays), so install new packages with `uv add`. |
+| Run in the environment | `uv run python3 script.py` | Runs the command with the project's `.venv`, active or not. |
+| Remove a package | `uv remove numpy` | Uninstalls it and deletes it from `pyproject.toml` and `uv.lock`. |
+| See what is installed | `uv tree` / `uv pip list` | `uv tree` shows the project's packages and what each one needs; `uv pip list` lists everything in `.venv`, pip included. |
+
+### Code Snippet: Create and Verify an Environment
+
+In an empty folder named `clinic-project`:
 
 ```bash
-uv --version
 uv python pin 3.13
-uv venv --python 3.13 .venv
+uv init --bare
+uv venv --seed
 source .venv/bin/activate
-uv pip install -r requirements.txt
-python --version
-python -c "import numpy as np; print(np.__version__)"
-deactivate
+uv add numpy==2.3.3
+python3 -c "import numpy as np; print(np.__version__)"
 ```
 
-In native Windows PowerShell, replace the Bash activation line with:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
+```text
+Pinned `.python-version` to `3.13`
+Initialized project `clinic-project`
+Using CPython 3.13.14
+Creating virtual environment with seed packages at: .venv
+ + pip==26.2.1
+Activate with: source .venv/bin/activate
+Resolved 2 packages in 3ms
+Installed 1 package in 13ms
+ + numpy==2.3.3
+2.3.3
 ```
 
-## Recreate instead of assuming
+Timings vary, and the first download of a package adds lines of its own. `.python-version`, `pyproject.toml`, and `uv.lock` are now the project's records: which Python and which packages to rebuild. Commit all three to Git; none of them belongs in `.gitignore`.
 
-An import from the first environment proves only that the first environment works. Recreate the dependency set in a separate disposable directory to test the recorded instructions:
+<callout icon="💡" color="blue_bg">
+	## Skip activation with `uv run`
+	Most of the time `uv run` saves the manual steps: `uv run python3 analysis.py` finds the project's `.venv`, brings it up to date with `pyproject.toml` and `uv.lock`, and runs the command there, whether or not the environment is active.
+</callout>
 
-The recreated environment should independently report Python 3.13 and NumPy 2.3.3.
+## Recreate an Environment
+
+A result is **reproducible** when another person can rebuild the software environment and rerun the program on the same inputs. Commit the records and check them by rebuilding in a new folder; the same commands set up a project someone else made, such as an assignment handout.
+
+### Code Snippet: Recreate from the Records
+
+In a new folder holding copies of `.python-version`, `pyproject.toml`, and `uv.lock`:
+
+```bash
+uv venv --seed
+uv sync
+uv run python3 -c "import numpy as np; print(np.__version__)"
+```
+
+```text
+Using CPython 3.13.14
+Creating virtual environment with seed packages at: .venv
+ + pip==26.2.1
+Activate with: source .venv/bin/activate
+Resolved 2 packages in 0.77ms
+Installed 1 package in 13ms
+ + numpy==2.3.3
+2.3.3
+```
+
+`uv venv` used the Python that `.python-version` names, and `uv sync` installed the NumPy version that `uv.lock` records.
+
+## Which Python Is Running?
+
+After `source .venv/bin/activate`, the prompt starts with the project's name, such as `(assignment-03)`. To check, ask the shell which `python3` it runs and which version:
+
+```text
+(assignment-03) ~/assignment-03 $ which python3
+/home/alice/assignment-03/.venv/bin/python3
+(assignment-03) ~/assignment-03 $ python3 --version
+Python 3.13.14
+```
+
+Inside Python, `sys.executable` gives the same path; this one-line command is the form Assignment 03 records:
+
+```text
+(assignment-03) ~/assignment-03 $ python3 -c "import sys; print(sys.executable)"
+/home/alice/assignment-03/.venv/bin/python3
+```
+
+<callout icon="🐍" color="yellow_bg">
+	## Multiple Python Installations
+	On "lived-in" computers with multiple Python installations (e.g., native, Homebrew, Conda), `python` and `python3` can point to entirely different versions or installations, each with different packages available.
+</callout>
+
+## When `import numpy` Fails
+
+```text
+$ python3 -c "import numpy as np"
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
+```
+
+`ModuleNotFoundError` means the Python that ran the code cannot find the package. The usual causes:
+
+- **The environment is not active**, or VS Code picked another interpreter: `which python3` in the terminal, or `sys.executable` in the code that failed, has no `.venv` in its path. Run `source .venv/bin/activate` in this terminal, and in VS Code run **Python: Select Interpreter** (Lecture 02) and choose `./.venv/bin/python`.
+- **The project's packages are not installed**: run `uv sync`.
+- **The package is new to this project**: `uv add pandas==3.0.5` installs it and records it in `pyproject.toml`.
+
+## Using `requirements.txt` (alternative)
+
+Many projects list their packages in a **requirements file**, `requirements.txt`, instead, and tools such as pip and Google Colab install from one. It holds one package per line, with `==` pinning an exact version, and has no lock file beside it.
+
+```text
+numpy==2.3.3
+pandas==3.0.5
+```
+
+### Reference Card: Requirements Files
+
+- `uv pip install -r requirements.txt`: Install every listed package into the active environment; `pyproject.toml` is unchanged.
+- `uv export --no-hashes > requirements.txt`: Write the packages `uv.lock` records; `--no-hashes` leaves out download checksums.
+- `uv pip freeze > requirements.txt`: Write every package installed in the active environment, pip included.
+- `python3 -m pip install -r requirements.txt`: The same install with pip, as Colab and the alternatives below do.
+
+### Code Snippet: Share the Environment as `requirements.txt`
+
+```bash
+uv export --no-hashes > requirements.txt
+cat requirements.txt
+```
+
+```text
+# This file was autogenerated by uv via the following command:
+#    uv export --no-hashes
+numpy==2.3.3
+    # via clinic-project
+```
 
 ## Using standard-library venv (alternative)
 
-Use this concise fallback only when uv is unavailable and the candidate Python interpreter is already installed. Confirm that `python` reports 3.13 before creating the environment:
+Python's standard library includes `venv`, which creates an environment with pip already in it; pip installs from `requirements.txt`, not `uv.lock`. Use one environment tool per project.
 
 ### Reference Card: standard-library `venv`
 
 | Task | Command | Note |
 | :--- | :--- | :--- |
-| Create | `python -m venv .venv` | Use the already-installed Python 3.13 interpreter. |
-| Activate | `source .venv/bin/activate` | In PowerShell, use `\.venv\Scripts\Activate.ps1`. |
-| Install | `python -m pip install -r requirements.txt` | Uses the active environment's pip. |
+| Create | `python3 -m venv .venv` | Uses the installed Python 3.13. |
+| Activate | `source .venv/bin/activate` | PowerShell: `.\.venv\Scripts\Activate.ps1`. |
+| Install | `python3 -m pip install -r requirements.txt` | Uses the active environment's pip. |
 | Leave | `deactivate` | Returns to the previous shell environment. |
-
-In native Windows PowerShell, replace the Bash activation line with:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-The outcome is the same: an activated `.venv` created from the deliberate direct-dependency file. Choose one setup route; do not nest one environment inside another.
 
 ## Using Conda (alternative comparison)
 
 [Conda documentation](https://docs.conda.io/)
 
-Conda is not the course's primary setup route. Use it only if the configured channels provide the exact candidate Python version; otherwise use uv. This example keeps the same `.venv` location and installs the same deliberate requirements file.
+Conda manages Python environments and packages, including non-Python dependencies.
 
 ### Reference Card: Conda alternative
 
 | Task | Command | Result |
 | :--- | :--- | :--- |
 | Create | `conda create --prefix ./.venv python=3.13 pip` | Creates the same `.venv` location with Conda. |
-| Activate | `conda activate ./.venv` | Selects the Conda environment. |
-| Activate (PowerShell) | `conda activate .\.venv` | Windows alternative. |
-| Install | `python -m pip install -r requirements.txt` | Installs the deliberate requirements. |
+| Activate | `conda activate ./.venv` (PowerShell: `conda activate .\.venv`) | Selects the Conda environment. |
+| Install | `python3 -m pip install -r requirements.txt` | Installs the packages a requirements file lists. |
 | Leave | `conda deactivate` | Returns to the previous environment. |
 
-# Shell pipelines and small automation
+![xkcd 2347: Dependency. Every project stands on packages other people maintain, which is why yours records exactly which versions it needs](media/xkcd_2347.png)
 
-Before the Python and NumPy examples, use the terminal to inspect a small CSV. Run `demo/01_cli_pipeline_demo.sh` from a disposable directory; it creates only paths below the current working directory.
+# Shell Pipelines and Scripts
 
-Pipes (`|`) send one command's output to the next command. Redirection (`>` and `>>`) writes output to a file; `>>` appends. The core bounded pipeline skips a header with `tail`, selects a field with `cut`, sorts it for `uniq`, counts records with `wc`, and limits displayed output with `head`:
+A **pipeline** chains shell commands so each works on the previous one's output, answering quick questions about a data file, such as visits per clinic, without Python. A **shell script** saves the commands in a file, so the analysis reruns with one command when new data arrives.
 
-### Code Snippet: Inspect a small CSV
+## Shell Scripts
+
+### Reference Card: Shell Scripts
+
+- `cat > count_clinics.sh`: Paste the script, press **Enter**, then **Ctrl+C** (Lecture 01).
+- `#!/bin/bash`: The first line; names the shell the script expects.
+- `# note`: A comment; Bash skips it in a script. At a zsh prompt, the Mac default, `#` is not a comment, so type commands without notes.
+- `\` at the end of a line: Continue the same command on the next line.
+- `bash count_clinics.sh`: Run the script from top to bottom.
+
+### Code Snippet: Save a Pipeline as a Script
+
+The pipeline and the timestamp variable in this script are explained in the next sections.
 
 ```bash
-tail -n +2 data/raw/students.csv | cut -d',' -f4 | sort | uniq -c | head -n 5
-tail -n +2 data/raw/students.csv | wc -l
+#!/bin/bash
+# Count encounters per clinic; save the counts under this run's timestamp.
+timestamp=$(date +"%Y%m%d_%H%M%S")
+mkdir -p results
+tail -n +2 data/raw/encounters.csv \
+  | cut -d',' -f4 | sort | uniq -c > "results/clinic_counts_${timestamp}.txt"
+echo "Saved results/clinic_counts_${timestamp}.txt"
 ```
 
-Shell variables use `name=value` with no spaces. Capture one timestamp with `timestamp=$(date +"%Y%m%d_%H%M%S")`, then reuse `$timestamp` in output names and log lines so one run has one identifier. Append a concise status message with `echo "${timestamp} complete" >> logs/processing.log`.
-
-# Brief Python refresher
-
-Lectures 01–02 introduced type checking and f-string formatting. Keep those core-Python tools available while reading the NumPy examples below; no NumPy objects are needed for this refresher.
-
-```python
-name = "Alice"
-grade = 87.5
-print(f"Student {name} earned {grade:.1f}%")
+```text
+$ bash count_clinics.sh
+Saved results/clinic_counts_20260918_162310.txt
 ```
 
-**LIVE DEMO!**
+Scripts can also take arguments and stop at the first failing command; [the bonus page](BONUS.md) covers those.
 
-![It's pronounced...](media/numpy.webp)
+## Pipelines
 
-# Why NumPy Matters
+A **pipe** (`|`) sends one command's output into the next command, as `>` (Lecture 01) sends it into a file. On Demo 1's `data/raw/encounters.csv`, a header and six rows, this pipeline counts encounters per clinic, one stage at a time:
 
-List comprehensions build a new list by applying an expression to each item, optionally keeping only items that pass a condition. They are concise Python, but still run one Python-level operation at a time.
+| Stage | Command | Output |
+| --- | --- | --- |
+| Input | `cat data/raw/encounters.csv` | `patient_id,age,systolic_bp,clinic`, `P001,54,128,Cardiology`, … 7 lines |
+| Skip the header | `tail -n +2` | `P001,54,128,Cardiology`, `P002,39,118,Primary Care`, … 6 lines |
+| Keep field 4 | `cut -d',' -f4` | `Cardiology`, `Primary Care`, `Nephrology`, `Cardiology`, `Nephrology`, `Cardiology` |
+| Put equal lines together | `sort` | `Cardiology`, `Cardiology`, `Cardiology`, `Nephrology`, `Nephrology`, `Primary Care` |
+| Count each group | `uniq -c` | `3 Cardiology`, `2 Nephrology`, `1 Primary Care` |
 
-```python
-squares = [x * x for x in range(5)]
-even_squares = [x * x for x in range(5) if x % 2 == 0]
+### Reference Card: Pipeline Building Blocks
+
+- `tail -n +2 FILE`: Skip the first line, the header.
+- `cut -d',' -f4`: Keep the fourth comma-separated field.
+- `sort`: Put equal lines next to one another.
+- `uniq -c`: Count adjacent equal lines, so `sort` first.
+- `head -n 5`: Keep the first five lines.
+- `wc -l`: Count lines.
+- `command > FILE` / `command >> FILE`: Replace / append file contents.
+
+### Code Snippet: Count Encounters per Clinic
+
+```bash
+tail -n +2 data/raw/encounters.csv | cut -d',' -f4 | sort | uniq -c
+tail -n +2 data/raw/encounters.csv | wc -l
 ```
 
-Python is famously slow for numerical computing:
+```text
+      3 Cardiology
+      2 Nephrology
+      1 Primary Care
+6
+```
+
+## Wildcards and Searching
+
+A **wildcard** stands for part of a file name: `*` matches any run of characters and `?` exactly one, as in Lecture 02's `.gitignore` patterns such as `*.csv`. The shell replaces the pattern with every matching file name before the command runs. `grep` searches inside files instead: it prints each line that contains a pattern.
+
+### Examples of Wildcards
+
+In Demo 1's `~/03-demo` folder, as the download leaves it:
+
+| Pattern | The shell replaces it with |
+| --- | --- |
+| `*.sh` | `demo1_cli_pipeline.sh setup_demo.sh` |
+| `demo2_*.py` | `demo2_numpy_arrays.py demo2_numpy_performance.py demo2_types_and_lists.py` |
+| `demo?_*.py` | The five `demo2_` and `demo3_` scripts |
+| `*.txt` | Nothing matches: Bash passes `*.txt` on as typed, so `ls *.txt` reports `No such file or directory`, and zsh stops with `no matches found: *.txt` |
+
+A `grep` pattern is a **regular expression**: most characters match themselves, and a few have special meanings. On `data/raw/encounters.csv`:
+
+| Pattern | Matches a line that | Matching lines |
+| --- | --- | --- |
+| `Cardiology` | Contains `Cardiology` | `P001,54,128,Cardiology`, `P004,45,131,Cardiology`, `P006,58,126,Cardiology` |
+| `^P` | Starts with `P` | The six records, not the header |
+| `,Cardiology$` | Ends with `,Cardiology` | The same three records as `Cardiology` |
+| `,14.,` | Holds `,14`, any one character, then `,` | `P003,67,142,Nephrology`, `P005,72,145,Nephrology` |
+
+### Reference Card: Wildcards and `grep`
+
+- `*`: In a file name, any run of characters, including none; `*.csv` is every CSV file.
+- `?`: In a file name, exactly one character.
+- `grep 'PATTERN' FILE`: Print each line that contains `PATTERN`; single quotes pass `*`, `$`, and spaces to `grep` unchanged.
+- `grep -c`: Count matching lines instead of printing them.
+- `grep -v`: Print the lines that do _not_ match.
+- `grep -i`: Ignore upper and lower case.
+- `^` / `$`: In a pattern, the start / end of the line.
+- `.`: In a pattern, any one character.
+- `command | grep 'PATTERN'`: Keep only the matching lines of another command's output.
+
+### Code Snippet: Search the Encounter File
+
+```bash
+grep -c ',Cardiology$' data/raw/encounters.csv
+grep -v '^P' data/raw/encounters.csv
+tail -n +2 data/raw/encounters.csv | grep -i 'primary care'
+```
+
+```text
+3
+patient_id,age,systolic_bp,clinic
+P002,39,118,Primary Care
+```
+
+## Variables and Timestamps
+
+The shell stores text in a **variable** and captures a command's output with **command substitution**, `$(...)`; together they put the time a run started into its output file's name, so each run keeps its own result instead of `>` replacing the last one.
+
+### Reference Card: Shell Variables and Timestamps
+
+- `name=value`: Store text; no spaces around `=`.
+- `"$name"` / `"${name}"`: Use the value; quotes keep spaces, and braces mark where the name ends, as in `summary_${timestamp}.txt`.
+- `$(command)`: Replace the expression with the command's output.
+- `date +"%Y%m%d_%H%M%S"`: The current time as year, month, day, underscore, hour, minute, second, such as `20260918_161539`, which sorts in time order.
+
+### Code Snippet: Name and Log a Run
+
+```bash
+timestamp=$(date +"%Y%m%d_%H%M%S")
+echo "$timestamp"
+echo "Run: $timestamp" > "results/summary_${timestamp}.txt"
+echo "${timestamp} complete" >> logs/processing.log
+tail -n 1 logs/processing.log
+```
+
+Your timestamp will differ:
+
+```text
+20260918_162001
+20260918_162001 complete
+```
+
+# LIVE DEMO!
+
+# Checking Types and Looping over Lists
+
+Three Python tools handle everyday list work: `isinstance()` checks a value's type before you calculate with it (numbers read from files are often text), `zip()` walks two lists together so each ID stays with its reading, and a **list comprehension** builds a new list in one line.
+
+## Checking Types
+
+**Introspection** means asking an object what it is while the program runs: `type()` (Lecture 01) names the type, and `isinstance()` answers yes or no, which suits an `if`.
+
+| Value | `type(value)` | `isinstance(value, str)` |
+| --- | --- | --- |
+| `"72"` | `<class 'str'>` | `True` |
+| `80` | `<class 'int'>` | `False` |
+| `"88"` | `<class 'str'>` | `True` |
+
+### Reference Card: Object Introspection
+
+- `type(value)`: The value's exact type.
+- `isinstance(value, type)`: `True` when the value has that type.
+- `dir(value)`: List the value's attributes and methods.
+- `help(value)` / `help(str.split)`: Read documentation; press **Q** to leave a paged view.
+- `id(value)`: The object's identity number during its lifetime.
+
+### Code Snippet: Inspect Values Before Using Them
 
 ```python
-# Pure Python approach (SLOW)
-my_list = list(range(1_000_000))
-result = [x * 2 for x in my_list]  # 46.4 ms
+readings = ["72", 80, "88"]   # text from a file, mixed with numbers
+clean = []
+for value in readings:
+    if isinstance(value, str):
+        value = int(value)
+    clean.append(value)
+print(clean, sum(clean))      # [72, 80, 88] 240
+sum(readings)                 # TypeError: unsupported operand type(s) for +: 'int' and 'str'
+```
 
-# NumPy approach (FAST)
+![xkcd 1537: Types. A language that guesses what mixed types mean gives surprises; Python raises TypeError instead, so check types first](media/xkcd_1537.png)
+
+## Sequence Functions
+
+### Reference Card: Sequence Functions
+
+- `enumerate(items, start=0)`: Yield position-value pairs (Lecture 01).
+- `zip(left, right)`: Yield pairs until the shorter input ends.
+- `reversed(items)`: Iterate from the last item to the first.
+- `sorted(items)`: Return a new sorted list. For a NumPy array use `np.sort()` (Sorting and Ranking, below): `sorted()` on a 2-D array raises `ValueError`.
+
+### Code Snippet: Keep Related Values Together
+
+```python
+patients = ["P001", "P002", "P003"]
+systolic = [128, 142, 118]
+for patient, reading in zip(patients, systolic):
+    print(f"{patient}: {reading}")    # P001: 128, then P002: 142, P003: 118
+print(list(reversed(patients)))       # ['P003', 'P002', 'P001']
+```
+
+## List Comprehensions
+
+`[expression for item in items if condition]` reads as "make this, for each item, keeping only items that pass." A plain loop always works too; [the bonus page](BONUS.md) shows more forms.
+
+### Reference Card: List Comprehensions
+
+- `[expr for x in items]`: Transform every item; a new list of the same length.
+- `[x for x in items if condition]`: Keep only items that pass; a new, possibly shorter list.
+- `[expr for x in items if condition]`: Filter, then transform.
+
+### Code Snippet: The Same List Two Ways
+
+```python
+temps_f = [98.6, 101.2, 99.5, 103.1]
+fevers = []                                   # a loop that builds a list
+for t in temps_f:
+    if t >= 100.4:
+        fevers.append(t)
+print(fevers)                                 # [101.2, 103.1]
+print([t for t in temps_f if t >= 100.4])     # [101.2, 103.1]: the same list in one line
+print([mg / 1000 for mg in [250, 500, 125]])  # [0.25, 0.5, 0.125]: mg to g
+```
+
+# NumPy Basics
+
+![It's pronounced "num pie": NumPy is short for Numerical Python, whatever the cat says](media/numpy.webp)
+
+**NumPy** (Numerical Python) is the package for calculating on many numbers at once; pandas (Lecture 04) is built on it. Its **array** is a grid of same-type values, such as patients × visits, and one expression like `readings * 2` works on every element with no loop, which is called **vectorization** and runs far faster than a loop.
+
+## Why NumPy
+
+```text
+Python list: [1, 2, 3] * 2  → [1, 2, 3, 1, 2, 3]   repeats the list
+NumPy array: [1, 2, 3] * 2  → [2, 4, 6]            multiplies each value
+```
+
+### Code Snippet: The Same Calculation Two Ways
+
+```python
+my_list = [1, 2, 3, 4, 5]
+print([x * 2 for x in my_list])   # [2, 4, 6, 8, 10]
 import numpy as np
-my_array = np.arange(1_000_000)
-result = my_array * 2  # 0.3 ms - 150x faster!
+my_array = np.array(my_list)
+print(my_array * 2)               # [ 2  4  6  8 10]
 ```
 
-**NumPy is 10-100x faster** than pure Python for numerical operations.
+`import numpy as np` loads NumPy under its standard alias `np` (Lecture 02), which the snippets below assume, and `np.array()` turns a list into an array. On Demo 2's one million heart-rate readings, the list took about 24 ms and the array about 1 ms on one machine.
 
-## The NumPy Solution
+## NumPy Data Types
 
-- **ndarray**: Fast, memory-efficient multidimensional arrays
-- **Vectorized operations**: Apply functions to entire arrays at once
-- **Broadcasting**: Smart handling of different-sized arrays
-- **Universal functions (ufuncs)**: Fast element-wise operations
+NumPy stores values in its own **data types** (**dtypes**), such as `int64` and `float64`. Each dtype has a fixed size, so an array's values sit side by side in memory and NumPy processes them in one pass, which is where the speed comes from. pandas' numeric columns (Lecture 04) use the same dtypes.
 
-# NumPy Arrays
+| Python type | NumPy dtype | `np.array(...)` of | Holds |
+| --- | --- | --- | --- |
+| `int` | `int64` | `[1, 2, 3]` | Whole numbers up to about 9.2 × 10¹⁸ |
+| `float` | `float64` | `[1.5, 2]` | Decimals, to about 15 significant digits |
+| `bool` | `bool` | `[True, False]` | `True` or `False` |
+| `str` | `<U5` | `["98.6", "101.2"]` | Text up to 5 characters |
 
-## NumPy Quick Reference
+### Reference Card: Data Types
 
-![NumPy Cheatsheet](media/nparray_cheatsheet.png)
+- `arr.dtype`: The element type, such as `int64`.
+- `np.array(values, dtype=np.float64)`: Choose the dtype when creating the array.
+- `arr.astype(float)`: A new array converted to another dtype; also parses numeric text such as `"98.6"`.
+- `arr.tolist()` / `float(arr[0])`: Convert back to plain Python values.
 
-## Creating Arrays
+### Code Snippet: Convert Numeric Text
 
-### Reference Card: array creation
+```python
+temps = np.array(["98.6", "101.2", "99.5"])
+print(temps.dtype)          # <U5: text of up to 5 characters
+temps_f = temps.astype(float)
+print(temps_f + 1)          # [ 99.6 102.2 100.5]
+print(temps_f.astype(int))  # [ 98 101  99]: decimals dropped, not rounded
+print(temps_f.tolist())     # [98.6, 101.2, 99.5]: plain Python floats
+```
+
+![xkcd 571: Can't Sleep. A 16-bit integer counts to 32,767 and then wraps to -32,768; NumPy's fixed-size integers wrap the same way when a value outgrows its dtype](media/xkcd_571.png)
+
+## NumPy Arrays
+
+`np.array()` turns a list into a one-dimensional (1-D) array and a list of lists into a 2-D array, one inner list per row. An array's **shape** is the length of each dimension, rows first:
+
+```text
+          column 0  column 1  column 2
+row 0  →       1         2         3
+row 1  →       4         5         6        shape (2, 3)
+```
+
+### Creating Arrays
+
+#### Reference Card: Array Creation
 
 | Function | Purpose | Example output |
 | :--- | :--- | :--- |
 | `np.array(values)` | Converts a list or nested lists to an array. | 1D or 2D `ndarray` |
 | `np.zeros(shape)` | Fills an array with zeros. | `float` array |
 | `np.ones(shape)` | Fills an array with ones. | `float` array |
-| `np.arange(stop)` | Creates evenly spaced integer values. | `[0, 1, ..., stop - 1]` |
+| `np.arange(stop)` / `np.arange(start, stop)` | Evenly spaced integers, stopping before `stop`. | `np.arange(5)` → `[0 1 2 3 4]`; `np.arange(1, 13)` → 1 through 12 |
 | `np.full(shape, value)` | Fills an array with one value. | Array matching `shape` |
 
-### Code Snippet: Create arrays
+#### Code Snippet: Create Arrays
 
 ```python
-import numpy as np
-
-# From Python lists
-arr = np.array([1, 2, 3, 4, 5])
 arr_2d = np.array([[1, 2, 3], [4, 5, 6]])
-
-# Array creation functions
-zeros = np.zeros(5)              # array([0., 0., 0., 0., 0.])
-ones = np.ones((2, 3))           # 2x3 array of ones
-range_arr = np.arange(10)        # array([0, 1, 2, ..., 9])
-full = np.full((2, 3), 7)        # 2x3 array filled with 7
+print(arr_2d)               # [[1 2 3]
+                            #  [4 5 6]]
+print(np.zeros(3))          # [0. 0. 0.]: floats print with a trailing dot
+print(np.arange(5))         # [0 1 2 3 4]
+print(np.full((2, 3), 7))   # [[7 7 7]
+                            #  [7 7 7]]
 ```
 
-## Array Properties
+### Array Properties
 
-### Reference Card: array properties
+#### Reference Card: Array Properties
 
-| Attribute | Meaning | Example |
+| Attribute | Meaning | Example for `arr_2d` |
 | :--- | :--- | :--- |
-| `arr.shape` | Length along each dimension. | `(2, 3)` |
-| `arr.ndim` | Number of dimensions. | `2` |
-| `arr.size` | Total number of elements. | `6` |
-| `arr.dtype` | Element data type. | `int64` |
+| `arr_2d.shape` | Length along each dimension. | `(2, 3)` |
+| `arr_2d.ndim` | Number of dimensions. | `2` |
+| `arr_2d.size` | Total number of elements. | `6` |
+| `arr_2d.dtype` | Element data type. | `int64` |
 
-## Data Types
+### Random Arrays
 
-### Reference Card: data types
+Simulated data lets you practice an analysis before touching patient records. A **random number generator** produces values that look random, and a **seed** makes it produce the same sequence every run, so your results match your classmates'.
 
-| Operation | Purpose | Example |
+#### Reference Card: Random Number Generation
+
+| Method | Purpose | Example |
 | :--- | :--- | :--- |
-| `np.array(values, dtype=...)` | Chooses the initial element type. | `dtype=np.int32` |
-| `arr.astype(dtype)` | Returns a converted array. | `arr.astype(np.float64)` |
-| `astype(float)` | Converts numeric strings to numbers. | `str_arr.astype(float)` |
+| `np.random.default_rng(seed)` | Creates a random generator, NumPy's recommended way; the seed makes the sequence reproducible. Older code calls `np.random.seed()`. | `rng = np.random.default_rng(seed=42)` |
+| `rng.random(size)` | Uniform floats in `[0, 1)`. | `rng.random(5)` |
+| `rng.integers(low, high, size)` | Integers in `[low, high)`, which excludes `high`, so a `high` of `101` reaches 100; `size` may be a shape. | `rng.integers(60, 101, size=(100, 5))` |
+| `rng.standard_normal(size)` | Standard normal draws. | `rng.standard_normal(5)` |
 
-# Array Indexing and Slicing
+#### Code Snippet: Generate Reproducible Practice Data
 
-## Basic Indexing
+```python
+rng = np.random.default_rng(seed=42)
+print(rng.integers(18, 91, size=5))         # [24 74 65 50 49]: ages 18 through 90
+print(rng.integers(60, 101, size=(2, 3)))   # [[95 63 88]
+                                            #  [68 63 81]]: 2 patients × 3 heart rates
+```
 
-NumPy extends familiar Python indexing and slicing across multiple dimensions.
+Older tutorials call `np.random.seed()` and `np.random.randn()`; use `default_rng()` in new code.
 
-### Reference Card: one-dimensional indexing
+### Vectorized Arithmetic
+
+The operators `+`, `-`, `*`, `/`, and `**` work on whole arrays and return a new array of the same shape. Two arrays of the same shape combine position by position, and an array and a single number combine by applying that number to every element, which NumPy calls **broadcasting**; [the bonus page](BONUS.md) covers other shapes.
+
+| Expression | Printed result | Meaning |
+| --- | --- | --- |
+| `systolic` | `[128 142 118]` | Three readings in mmHg |
+| `systolic - 120` | `[ 8 22 -2]` | How far each reading is above 120 mmHg |
+| `systolic * 0.133` | `[17.024 18.886 15.694]` | The same readings in kPa |
+
+#### Code Snippet: Calculate Without an Explicit Loop
+
+```python
+arr1 = np.array([1, 2, 3, 4, 5])
+arr2 = np.array([5, 4, 3, 2, 1])
+print(arr1 + arr2)   # [6 6 6 6 6]
+print(arr1 ** 2)     # [ 1  4  9 16 25]
+```
+
+## Universal Functions (ufuncs)
+
+A **universal function** (ufunc) applies one math operation to every element and returns a new array: where Lecture 02's `math.sqrt(16)` takes one number, `np.sqrt(arr)` takes the square root of every element.
+
+### Reference Card: ufuncs
+
+- `np.sqrt(arr)`: Square root of each element.
+- `np.exp(arr)`: Exponential of each element.
+- `np.maximum(a, b)`: The larger value at each position of two arrays.
+
+### Code Snippet: Apply Mathematical Functions
+
+```python
+print(np.sqrt(np.array([1, 4, 9, 16, 25])))   # [1. 2. 3. 4. 5.]
+print(np.exp([1, 2, 3]))                      # [ 2.71828183  7.3890561  20.08553692]
+print(np.maximum([1, 5, 3], [4, 2, 6]))       # [4 5 6]
+```
+
+## Indexing and Slicing
+
+Array indexing works like Lecture 02's list indexing: square brackets, positions counted from 0, negative positions counted from the end, and half-open `start:stop` slices. A multidimensional array takes one index per dimension, separated by commas.
+
+### One-Dimensional Arrays
+
+#### Reference Card: One-Dimensional Indexing
 
 | Pattern | Purpose | Example |
 | :--- | :--- | :--- |
@@ -305,242 +665,376 @@ NumPy extends familiar Python indexing and slicing across multiple dimensions.
 | `arr[start:stop]` | Select a half-open slice. | `arr[2:7]` |
 | `arr[::step]` | Select every `step`th element. | `arr[::2]` |
 
-### Code Snippet: Slice a one-dimensional array
+#### Code Snippet: Slice a One-Dimensional Array
 
 ```python
-arr = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-
-# Single element
-first = arr[0]          # 0
-last = arr[-1]          # 9
-
-# Slicing
-subset = arr[2:7]       # array([2, 3, 4, 5, 6])
-every_other = arr[::2]  # array([0, 2, 4, 6, 8])
+arr = np.arange(10)      # [0 1 2 3 4 5 6 7 8 9]
+print(arr[0], arr[-1])   # 0 9
+print(arr[2:7])          # [2 3 4 5 6]
+print(arr[::2])          # [0 2 4 6 8]
 ```
 
-## Multidimensional Indexing
+### Multidimensional Arrays
 
-Comma-separated indices access elements, rows, or columns in multidimensional arrays.
+A 2-D array is a table: the first index picks a row and the second picks a column. Each index moves along an **axis**: axis 0 runs down the rows, and axis 1 runs across the columns. A 3-D array of patients × days × readings takes three indexes, `arr[patient, day, reading]`.
 
-### Reference Card: Rows, Columns, and Blocks
+```text
+bp              visit 1  visit 2  visit 3
+patient 0  →      128      131      126
+patient 1  →      142      145     [139]   ← bp[1, 2]
+patient 2  →      118      121      119
+bp[:, 0] is the visit 1 column: [128 142 118]
+```
 
-| Selection | Meaning for a 2D array | Result shape |
+#### Reference Card: Rows, Columns, and Blocks
+
+| Selection | Meaning | Result shape |
 | --- | --- | --- |
-| `arr[row, col]` | One element | Scalar |
-| `arr[row, :]` | All columns in one row | 1D row |
-| `arr[:, col]` | All rows in one column | 1D column |
-| `arr[:2, 1:3]` | First two rows, columns 1 and 2 | 2D block |
+| `arr[row, col]` | One element of a 2-D array | Scalar |
+| `arr[row, :]` or `arr[row]` | All columns in one row | 1-D row |
+| `arr[:, col]` | All rows in one column | 1-D column |
+| `arr[:2, 1:3]` | First two rows, columns 1 and 2 | 2-D block |
+| `arr3d[i]`, `arr3d[i, j]`, `arr3d[:, :, k]` | In a 3-D array, each single-number index removes one dimension; `:` keeps it | 2-D, 1-D, 2-D |
 
-## Boolean Indexing
-
-Boolean indexing filters arrays with conditional logic, selecting elements that meet specific criteria.
-
-### Reference Card: boolean indexing
-
-| Pattern | Purpose | Example |
-| :--- | :--- | :--- |
-| `arr > value` | Builds a Boolean mask. | `arr > 5` |
-| `arr[mask]` | Keeps matching elements. | `arr[arr > 5]` |
-| `(a) & (b)` | Combines conditions with AND. | `(arr > 2) & (arr < 8)` |
-| `(a) \| (b)` | Combines conditions with OR. | `(arr < 2) \| (arr > 8)` |
-
-### Code Snippet: Filter with a Boolean mask
+#### Code Snippet: Select Cells, Rows, Columns, and Blocks
 
 ```python
-arr = np.array([1, 5, 3, 8, 2, 9, 4])
-
-# Boolean mask
-mask = arr > 5              # array([False, False, False, True, False, True, False])
-high_values = arr[mask]     # array([8, 9])
-
-# Conditional operations
-arr[arr > 5] = 0            # Set values > 5 to 0
-
-# Multiple conditions (use & for AND, | for OR)
-mask = (arr > 2) & (arr < 8)
-filtered = arr[mask]
+bp = np.array([[128, 131, 126], [142, 145, 139], [118, 121, 119]])   # patients × visits, as drawn above
+print(bp[1, 2])    # 139: patient 1, visit 3
+print(bp[1])       # [142 145 139]: every visit for patient 1
+print(bp[:, 0])    # [128 142 118]: visit 1 for every patient
+print(bp[:2, 1:])  # [[131 126]
+                   #  [145 139]]: patients 0-1, visits 2-3
+week = np.zeros((2, 7, 3))   # 2 patients × 7 days × 3 readings a day
+print(week[:, :, 0].shape)   # (2, 7): every patient's first reading of each day
 ```
 
-## Fancy Indexing
+# LIVE DEMO!
 
-Fancy indexing uses integer arrays to select multiple elements at arbitrary positions without explicit loops.
+# Selecting and Reshaping Arrays
+
+NumPy selects array values by a condition, such as `bp >= 140`, or by a list of positions, and rearranges them into new shapes. Some results share data with the original array and others are copies, and changing what you thought was a copy can overwrite the raw readings, so views and copies come first.
+
+## Names, Aliases, and Mutability
+
+An object is **mutable** when its contents can change in place: lists (Lecture 02), dictionaries, sets, and arrays are mutable, while numbers, strings, and tuples are not. Assignment binds a name to an object without copying it, so `alias_values = values` makes an **alias**, a second name for the same array:
+
+```text
+values ────────┐
+               ├──> [10, 20, 30]   one array
+alias_values ──┘
+copied_values ───> [10, 20, 30]   a separate array
+```
+
+### Code Snippet: Alias Versus Copy
 
 ```python
-arr = np.array([10, 20, 30, 40])
-arr[[0, 3]]  # array([10, 40]); a copy
+values = np.array([10, 20, 30])
+alias_values = values
+alias_values[0] = 99
+print(values, alias_values is values)  # [99 20 30] True: `is` compares identity, `==` compares values
+copied_values = values.copy()
+copied_values[0] = 10
+print(values, copied_values)  # [99 20 30] [10 20 30]
 ```
 
-## Views vs Copies
+<callout icon="⚠️" color="yellow_bg">
+	## `b = a` is an alias! Not a copy!
+	A change through `b`, such as `b[0] = 99` or `b += 1`, changes `a` too, and a function that changes an array passed to it changes the caller's array. Write `b = a.copy()` when you need a separate array.
+</callout>
 
-Slicing creates views that share memory; explicit copies are independent.
+### Code Snippet: Functions Share the Caller's Array
+
+```python
+def add_one(values):
+    values += 1          # changes the caller's array
+
+data = np.array([1, 2, 3])
+add_one(data)
+print(data)              # [2 3 4]
+```
+
+To leave an input unchanged, return a new array (`return values + 1`) or work on `values.copy()`.
+
+## Views and Copies
+
+A slice is a **view**: a second window onto the same numbers, so changing a value through it changes the original array, as the alias did. `.copy()` makes an independent **copy**.
+
+### Reference Card: Views and Copies
+
+- `arr[1:3]`, `arr[:, 0]`, `arr[:2, 1:]`: A slice is a view; it shares data with `arr`.
+- `arr[1:3].copy()`: An independent copy; changes stay local.
+- `np.shares_memory(a, b)`: `True` when two arrays share data.
+
+### Code Snippet: Change a View, Keep a Copy
 
 ```python
 arr = np.array([10, 20, 30])
 view = arr[:2]
-independent = arr[:2].copy()
 view[0] = 99
-print(arr)          # [99 20 30]
-print(independent)  # [10 20]
+print(arr)                                    # [99 20 30]
+print(np.shares_memory(view, arr))            # True
+print(np.shares_memory(arr[:2].copy(), arr))  # False
 ```
 
-# NumPy Operations
+## Boolean Indexing
 
-## Arithmetic and Vectorized Operations
+**Boolean indexing** selects values by a condition instead of by position. A comparison such as `bp >= 140` builds a **Boolean mask**, an array of `True` and `False` with the same shape as `bp`; `bp[mask]` keeps the values at the `True` positions, and `mask.sum()` counts them, because `True` counts as 1.
 
-NumPy's vectorized operations calculate element-wise across arrays without explicit loops.
+```text
+bp                 bp >= 140 (the mask)
+[[128 131 126]     [[False False False]
+ [142 145 139]      [ True  True False]
+ [118 121 119]]     [False False False]]
 
-### Reference Card: vectorized arithmetic
+bp[bp >= 140]  →  [142 145]     the matching values, as a 1-D array
+```
 
-| Operation | Meaning | Example |
+### Reference Card: Boolean Indexing
+
+| Pattern | Purpose | Example |
 | :--- | :--- | :--- |
-| `a + b` | Element-wise addition. | `arr1 + arr2` |
-| `a * b` | Element-wise multiplication. | `arr1 * arr2` |
-| `a ** n` | Element-wise power. | `arr1 ** 2` |
-| `a * scalar` | Broadcasts one value across the array. | `arr1 * 2` |
+| `arr > value` | Builds a Boolean mask; in this card `arr` is a 1-D array. | `arr > 5` |
+| `arr[mask]` | Keeps matching elements as a new copy; a 2-D array gives a 1-D result. | `arr[arr > 5]` |
+| `values[labels == "x"]` | Keeps one group's values, where `labels` names the group at each position. | `systolic[clinics == "Cardiology"]` |
+| `np.unique(labels)` | The distinct labels, sorted, as an array; loop over it to visit each group once. `sorted(set(labels))` gives them as a list, which prints each as `np.str_('Cardiology')`. | `np.unique(clinics)` → `['Cardiology' 'Nephrology' 'Primary Care']` |
+| `(a) & (b)` / `(a) \| (b)` | Combines conditions with AND / OR; use these, not `and` and `or`, with each test in parentheses. | `(arr > 2) & (arr < 8)` |
+| `~mask` | Flips every `True` and `False`. | `arr[~(arr > 5)]` |
+| `mask.sum()` | Counts `True` values. | `(arr > 5).sum()` |
+| `mask.any()` / `mask.all()` | Is any / every value `True`? | `(arr > 5).any()` |
+| `arr[mask] = value` | Replaces matching elements in place; changes `arr`. | `arr[arr > 5] = 0` |
 
-### Code Snippet: Calculate without an explicit loop
+### Code Snippet: Filter and Count with a Mask
 
 ```python
-arr1 = np.array([1, 2, 3, 4, 5])
-arr2 = np.array([5, 4, 3, 2, 1])
-
-# Element-wise operations
-sum_arr = arr1 + arr2       # array([6, 6, 6, 6, 6])
-mult_arr = arr1 * arr2      # array([5, 8, 9, 8, 5])
-power_arr = arr1 ** 2       # array([1, 4, 9, 16, 25])
-
-# Scalar operations
-doubled = arr1 * 2          # array([2, 4, 6, 8, 10])
-arr = np.array([[1, 2, 3], [4, 5, 6]])
-result = arr + 10           # Adds 10 to all elements
+high = bp >= 140                      # bp from "Select Cells, Rows, Columns, and Blocks"
+print(bp[high])                       # [142 145]
+print(high.sum())                     # 2
+print(bp[(bp >= 120) & (bp < 130)])   # [128 126 121]
 ```
 
-## Statistical Operations
+## Multidimensional Boolean Indexing
 
-NumPy provides built-in statistics across entire arrays or specific axes.
+A mask the same shape as `bp` picks out single values and flattens them. To keep whole **rows** (patients) or whole **columns** (visits) instead:
 
-### Reference Card: statistics
+1. Build a 1-D mask with one `True` or `False` per row, such as `bp[:, 0] >= 140`, or one per column.
+2. Put it in that dimension's slot: `bp[row_mask]` keeps rows, and `bp[:, col_mask]` keeps columns. The result stays 2-D.
+3. Match the mask's length to that dimension; otherwise NumPy raises `IndexError: boolean index did not match indexed array along axis 0` (`axis 1` for a column mask).
 
-| Method | Meaning | Axis example |
+`.any()` and `.all()` build such a mask from every value at once. Given an axis, they collapse it:
+
+- `axis=1` checks across each row and gives one `True`/`False` per row (did this patient have any visit at 130 or above?).
+- `axis=0` checks down each column and gives one per column.
+
+```text
+              visit 1  visit 2  visit 3     bp[:, 0] >= 140   (row mask, one per patient)
+patient 0   [[  128      131      126 ]         False
+patient 1    [  142      145      139 ]         True      ← bp[row_mask] keeps this row
+patient 2    [  118      121      119 ]]        False
+
+(bp >= 140).any(axis=0)  →  [ True   True   False ]      (column mask, one per visit)
+                               ↑      ↑
+                    bp[:, col_mask] keeps visits 1 and 2
+```
+
+### Reference Card: Masks Along One Dimension
+
+| Pattern | Purpose | Example |
 | :--- | :--- | :--- |
-| `.mean()` | Average of all values. | `.mean(axis=1)` per row |
-| `.std()` | Standard deviation. | `.std()` overall |
-| `.max()` / `.min()` | Largest or smallest value. | `.max()` overall |
-| `axis=0` / `axis=1` | Reduce down rows / across columns in 2D. | One result per column / per row |
+| `arr2d[:, j] >= x` | Row mask from one column: one `True`/`False` per row. | `bp[:, 0] >= 140` → `[False  True False]` |
+| `arr2d[row_mask]` / `arr2d[row_mask, :]` | Keeps whole rows; the result stays 2-D. | `bp[bp[:, 0] >= 140]` → `[[142 145 139]]` |
+| `(arr2d > x).any(axis=1)` / `.all(axis=1)` | Row mask from every column: any / every value in the row passes. | `(bp >= 130).any(axis=1)` → `[ True  True False]` |
+| `(arr2d > x).any(axis=0)` | Column mask from every row. | `(bp >= 140).any(axis=0)` → `[ True  True False]` |
+| `arr2d[:, col_mask]` | Keeps whole columns. | `bp[:, [True, False, True]]` keeps visits 1 and 3 |
+| `arr2d[row_mask, j]` | Rows by mask, then one column by position. | `bp[bp[:, 0] >= 140, 2]` → `[139]` |
 
-### Code Snippet: Reduce a 2×3 array
+### Code Snippet: Keep Rows or Columns by a Condition
 
 ```python
-arr = np.array([[1, 2, 3], [4, 5, 6]])
-arr.mean(axis=0)  # [2.5, 3.5, 4.5]: one mean per column
-arr.mean(axis=1)  # [2., 5.]: one mean per row
-arr.mean()        # 3.5: one mean for the whole array
+visit1_high = bp[:, 0] >= 140               # one True/False per patient
+print(bp[visit1_high])                      # [[142 145 139]]
+print(bp[(bp >= 130).any(axis=1)])          # patients with any visit at 130 or above
+# [[128 131 126]
+#  [142 145 139]]
+print(bp[:, (bp >= 140).any(axis=0)])       # visits where any patient reached 140
+# [[128 131]
+#  [142 145]
+#  [118 121]]
 ```
+
+## Fancy Indexing
+
+**Fancy indexing** selects by a list of positions instead of a mask, in any order you choose. Like a mask, it returns a copy.
+
+### Reference Card: Fancy Indexing
+
+- `arr[[i, j]]`: The elements at positions `i` and `j`, in that order; a new copy.
+- `arr2d[[i, j]]`: Rows `i` and `j`, in that order.
+- `arr2d[:, [j, k]]`: Columns `j` and `k` of every row, in that order.
+- `arr[[i, j]] = value`: Replaces those elements in place; changes `arr`.
+
+### Code Snippet: Pick Positions, Rows, and Columns
+
+```python
+ids = np.array(["P001", "P002", "P003"])   # one ID per row of bp
+print(ids[[2, 0]])       # ['P003' 'P001']
+print(bp[[2, 0]])        # [[118 121 119]
+                         #  [128 131 126]]: rows 2 and 0, in that order
+print(bp[:, [0, -1]])    # [[128 126]
+                         #  [142 139]
+                         #  [118 119]]: each patient's first and last visit
+```
+
+<callout icon="🐼" color="blue_bg">
+	## Preview: pandas selects the same way, by name
+	Masks and lists of positions are how you will work in **pandas** (Lecture 04), the higher-level library that is the everyday workhorse for wrangling data tables. A pandas table labels its rows and columns, so the same moves use names: `df[df["systolic"] >= 140]` keeps rows by a condition, `df[["patient_id", "systolic"]]` picks columns by name, and `df.loc[mask, ["patient_id", "systolic"]]` does both at once.
+</callout>
 
 ## Array Reshaping
 
-Reshaping operations change an array's dimensions. `reshape` returns a view when possible but may need to copy data; `flatten` always returns a copy.
+![NumPy reshape: 12 values fill a 3×4 grid row by row, and ravel() turns the grid back into one row](media/numpy_reshape_panel.png)
 
-### Reference Card: reshape and transpose
+### Reference Card: Reshape and Transpose
 
 | Operation | Purpose | Result |
 | :--- | :--- | :--- |
-| `arr.reshape(rows, columns)` | Changes dimensions without changing values. | New shape `(rows, columns)` |
-| `arr.flatten()` | Makes a 1D copy. | Independent 1D array |
-| `arr.T` | Swaps rows and columns. | Transposed view when possible |
+| `arr.reshape(rows, columns)` | Changes dimensions without changing values; a view when possible. | New shape `(rows, columns)` |
+| `arr.reshape(-1, columns)` | `-1` lets NumPy compute that length from the array's size. | `np.arange(1, 13).reshape(-1, 4)` → shape `(3, 4)` |
+| `arr.flatten()` / `arr.ravel()` | Back to 1D; `flatten` always copies, `ravel` returns a view when it can. | `[1 2 3 4 5 6]` for `arr` below |
+| `arr.T` | Swaps rows and columns. | Transposed view |
 
-### Code Snippet: Reshape versus transpose
+### Code Snippet: Reshape Versus Transpose
 
 ```python
-arr.reshape(3, 2)  # [[1, 2], [3, 4], [5, 6]]: same flat order
-arr.T             # [[1, 4], [2, 5], [3, 6]]: rows become columns
+arr = np.array([[1, 2, 3], [4, 5, 6]])
+print(arr.reshape(3, 2))  # [[1 2]
+                          #  [3 4]
+                          #  [5 6]]: same flat order
+print(arr.T)              # [[1 4]
+                          #  [2 5]
+                          #  [3 6]]: rows become columns
 ```
 
-# Semi-Advanced NumPy
+![xkcd 2295: Garbage Math. Averaging independent garbage only gives better garbage; a summary is only as good as the readings behind it](media/xkcd_2295.png)
 
-The following short reference keeps a few useful NumPy operations visible; the more specialized material is collected in [the bonus page](BONUS.md).
+# Analyzing Arrays
 
-## Universal Functions (ufuncs)
+NumPy turns an array of readings into answers with one expression each, where plain Python needs a loop: summarize values (a mean over the whole array, along one axis, or for one group), label values by a rule, and rank them.
 
-### Reference Card: ufuncs
+## Summary Statistics
 
-| Function | Purpose | Example |
-| :--- | :--- | :--- |
-| `np.sqrt(arr)` | Square root element-wise. | `np.sqrt(arr)` |
-| `np.exp(arr)` | Exponential element-wise. | `np.exp([1, 2, 3])` |
-| `np.maximum(a, b)` | Larger value at each position. | `np.maximum(arr1, arr2)` |
+A **reduction** collapses many values into one, such as a mean. Passing `axis` reduces along one dimension instead, as `.any(axis=1)` did for masks: `axis=0` collapses the rows and gives one result per column, and `axis=1` collapses the columns and gives one result per row. For a patients × visits table, `axis=1` gives each patient's mean and `axis=0` each visit's.
 
-### Code Snippet: Apply mathematical functions
+```text
+[[1, 2, 3],  → axis=1 mean: 2.0 for this row
+ [4, 5, 6]]  → axis=1 mean: 5.0 for this row
+  ↓  ↓  ↓
+ axis=0 means: [2.5, 3.5, 4.5], one per column
+```
+
+Most summaries work as a method (`arr.mean()`) or a function (`np.mean(arr)`), and both accept `axis`; `np.median()` and `np.percentile()` are functions only.
+
+### Reference Card: Summaries by Axis
+
+For `arr = np.array([[1, 2, 3], [4, 5, 6]])`:
+
+| Task | Method or function | Purpose and key arguments | Typical output |
+| --- | --- | --- | --- |
+| Total | `arr.sum()` | Add values; `axis=0` gives one total per column | `21`; `axis=0` → `[5 7 9]` |
+| Average | `arr.mean()` / `np.mean(arr, axis=1)` | Mean; `axis=1` gives one mean per row | `3.5`; `axis=1` → `[2. 5.]` |
+| Middle value | `np.median(arr)` | Median; less affected by one extreme reading than the mean | `3.5`; `axis=0` → `[2.5 3.5 4.5]` |
+| Spread | `arr.std()` | Population SD (divides by n); `ddof=1` divides by n − 1, the sample SD pandas uses (Lecture 04) | `1.708`; `ddof=1` → `1.871` |
+| Variance | `arr.var()` | The SD squared; also takes `ddof` | `2.917` |
+| Extremes | `arr.min()` / `arr.max()` | Smallest / largest value | `1` / `6`; `axis=1` → `[1 4]` / `[3 6]` |
+| Percentile | `np.percentile(arr, q)` | Value below which `q` percent of values fall; `q` may be a list | `np.percentile(arr, [25, 75])` → `[2.25 4.75]` |
+| Running total | `arr.cumsum(axis=1)` | Cumulative sum along the axis | `[[ 1  3  6] [ 4  9 15]]` |
+| Count matches | `(arr > 2).sum(axis=1)` | Count of `True` values per row | `[1 3]` |
+
+### Code Snippet: Reduce a 2×3 Array
 
 ```python
-arr = np.array([1, 4, 9, 16, 25])
+arr = np.array([[1, 2, 3], [4, 5, 6]])
+print(arr.mean(axis=0))   # [2.5 3.5 4.5]: one mean per column
+print(arr.mean(axis=1))   # [2. 5.]: one mean per row
+print(arr.mean())         # 3.5: one mean for the whole array
+print(arr.max(axis=0))    # [4 5 6]: the largest value in each column
+```
 
-# Common mathematical functions
-sqrt_arr = np.sqrt(arr)         # array([1., 2., 3., 4., 5.])
-exp_arr = np.exp([1, 2, 3])     # array([2.718, 7.389, 20.086])
+### Code Snippet: Select One Group by a Label
 
-# Binary functions
-arr1 = np.array([1, 5, 3])
-arr2 = np.array([4, 2, 6])
-max_arr = np.maximum(arr1, arr2) # array([4, 5, 6])
+```python
+clinics = np.array(["Cardiology", "Primary Care", "Cardiology", "Nephrology", "Primary Care"])
+systolic = np.array([142, 118, 151, 135, 128])   # one reading per visit, same order as clinics
+print(systolic[clinics == "Cardiology"])         # [142 151]
+for clinic in sorted(set(clinics)):              # each clinic once, in order
+    print(clinic, systolic[clinics == clinic].mean())
+# Cardiology 146.5
+# Nephrology 135.0
+# Primary Care 123.0
 ```
 
 ## Conditional Logic
 
-### Reference Card: conditional logic
+`np.where(condition, value_if_true, value_if_false)` is the array version of `if`/`else`: it checks every position and picks one of two values.
 
-| Function | Purpose | Example |
-| :--- | :--- | :--- |
-| `np.where(condition, x, y)` | Select `x` where true, `y` elsewhere. | `np.where(arr < 0, 0, arr)` replaces negatives with zero. |
+### Reference Card: Labels by Rule
 
-## Boolean Array Methods
+- `np.where(cond, a, b)`: `a` where `cond` is `True`, `b` elsewhere; `a` and `b` may be arrays, so `np.where(cond, arr, 0)` keeps values that pass.
+- `np.where(c1, a, np.where(c2, b, c))`: Three labels; test the highest band first.
+- `np.select([c1, c2, c3], [a, b, c], default=d)`: Any number of labels; the first true condition wins, and `default` fills positions where none is true.
 
-Use `any()` to ask whether at least one value meets a condition; `all()` asks whether every value does.
+### Code Snippet: Label Readings by Rules
 
-| Expression | Result |
-| --- | --- |
-| `(arr > 0).any()` | One Boolean: is any value positive? |
-| `(arr > 0).all()` | One Boolean: are all values positive? |
-| `(arr > 0).sum()` | Number of positive values |
+```python
+systolic = np.array([118, 142, 127, 135, 151, 109])
+print(np.where(systolic >= 140, "high", "ok"))   # ['ok' 'high' 'ok' 'ok' 'high' 'ok']
+print(np.where(systolic >= 140, systolic, 0))    # [  0 142   0   0 151   0]
+bands = [systolic >= 140, systolic >= 130, systolic >= 120]   # highest band first
+print(np.select(bands, ["stage 2", "stage 1", "elevated"], default="normal"))
+# ['normal' 'stage 2' 'elevated' 'stage 1' 'stage 2' 'normal']
+```
 
-## Sorting
+## Sorting and Ranking
+
+`np.sort()` returns the _values_ in order. `np.argsort()` returns the _positions_ that would put them in order, so indexing a matching array of patient IDs with them tells you _which_ patient has each value; `[::-1]` reverses an order. On a 2-D array both sort each row on its own; to reorder whole rows, `argsort` one column and index the rows with the result.
+
+### Reference Card: Values Versus Positions
 
 | Operation | Result | Changes the original? |
 | --- | --- | --- |
 | `np.sort(arr)` | Sorted copy | No |
-| `arr.sort()` | `None` | Yes |
-| `np.sort(arr, axis=0)` | Each column sorted independently in 2D | No |
+| `arr.sort()` | `None`; sorts `arr` in place | Yes |
+| `np.argsort(arr)` | Positions that would sort the array | No |
+| `arr.argmin()` / `arr.argmax()` | Position of the smallest / largest value in a 1-D array; `ids[arr.argmax()]` looks up the matching ID | No |
+| `np.sort(arr2d, axis=1)` / `axis=0` | Each row / each column sorted on its own; rows by default | No |
+| `np.argsort(arr2d, axis=1)` | Sorting positions within each row | No |
+| `arr2d[np.argsort(arr2d[:, 0])]` | Whole rows, ordered by column 0 | No |
 
-## Random Number Generation
-
-### Reference Card: random number generation
-
-| Method | Purpose | Example |
-| :--- | :--- | :--- |
-| `np.random.default_rng()` | Creates a modern random generator. | `rng = ...` |
-| `default_rng(seed)` | Makes the sequence reproducible. | `seed=42` |
-| `rng.random(size)` | Uniform floats in `[0, 1)`. | `rng.random(5)` |
-| `rng.integers(low, high, size)` | Integers in `[low, high)`. | `rng.integers(1, 10, size=5)` |
-| `rng.standard_normal(size)` | Standard normal draws. | `rng.standard_normal(5)` |
-
-### Code Snippet: Generate reproducible random data
+### Code Snippet: Find the Highest Values and Who Has Them
 
 ```python
-# Create random generator
-rng = np.random.default_rng()  # No seed (different each time)
-rng_seeded = np.random.default_rng(seed=42)  # Reproducible
-
-# Generate random numbers
-random_nums = rng.random(5)              # 5 random floats [0, 1)
-random_ints = rng.integers(1, 10, size=5) # 5 random ints [1, 10)
-normal_nums = rng.standard_normal(5)     # 5 from normal distribution
-
-# With seed for reproducibility
-rng = np.random.default_rng(seed=123)
-data = rng.random((3, 3))  # Same result every time
+ids = np.array(["P001", "P002", "P003", "P004", "P005"])
+avg_glucose = np.array([112, 98, 145, 101, 130])   # one average per patient, same order as ids
+order = np.argsort(avg_glucose)
+print(order)                       # [1 3 0 4 2]: position 1 lowest, position 2 highest
+top_two = order[-2:][::-1]         # last two positions, largest first
+print(ids[top_two], avg_glucose[top_two])   # ['P003' 'P005'] [145 130]
+print(ids[avg_glucose.argmax()])   # P003
 ```
 
-![Learning to Code...](media/learning_to_code.png)
+### Code Snippet: Sort Along an Axis and Order Rows
+
+```python
+# bp: the patients × visits array from "Select Cells, Rows, Columns, and Blocks"
+print(np.sort(bp, axis=1))           # [[126 128 131]
+                                     #  [139 142 145]
+                                     #  [118 119 121]]: each patient's readings in order
+order = np.argsort(bp[:, 0])[::-1]   # patients by visit 1, highest first
+print(bp[order])                     # [[142 145 139]
+                                     #  [128 131 126]
+                                     #  [118 121 119]]: each row stays intact
+```
+
+![Learning to code, day 1: a husky at the keyboard, which is how everyone starts](media/learning_to_code.png)
 
 # LIVE DEMO!

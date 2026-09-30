@@ -1,18 +1,24 @@
-"""Public, artifact-only grading rules for Assignment 01."""
+"""Artifact-only grading rules for Assignment 01.
+
+Each check is scored on its own: 10 points for each terminal-practice file,
+5 for each graded line of the readiness report, and 15 for the identity hash.
+A wrong report line costs its own 5 points and nothing else.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from _assignment_checks import run_public_checks
+from _value_checks import run_checks
 
 
-POINTS = (20, 80)
+# In the order of _value_checks.CHECKS: two practice files, thirteen report lines, and the identity hash.
+POINTS = (10, 10) + (5,) * 13 + (15,)
 
 
 def grade_submission(submission_dir: Path) -> dict:
-    """Grade artifacts without importing or executing submitted student code."""
-    diagnostics = run_public_checks(Path(submission_dir))
+    """Grade saved artifacts without importing or executing submitted student code."""
+    diagnostics = run_checks(Path(submission_dir))
     tests = []
     for (name, detail), max_score in zip(diagnostics, POINTS, strict=True):
         passed = detail is None

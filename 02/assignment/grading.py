@@ -1,18 +1,23 @@
-"""Public, artifact-only grading rules for Assignment 02."""
+"""Artifact-only grading rules for Assignment 02.
+
+Each requirement is scored on its own, so a partial submission reports exactly
+which value to fix, and every expected value is recomputed from the checks' own
+copy of the supplied encounter file.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from _public_checks import run_public_checks
+from _value_checks import run_checks
 
 
-POINTS = (30, 30, 40)
+POINTS = (5, 5, 5, 10, 8, 7, 10, 15, 5, 5, 5, 5, 15)
 
 
 def grade_submission(submission_dir: Path) -> dict:
-    """Grade artifacts without importing or executing submitted student code."""
-    diagnostics = run_public_checks(Path(submission_dir))
+    """Grade saved artifacts without importing or executing submitted student code."""
+    diagnostics = run_checks(Path(submission_dir))
     tests = []
     for (name, detail), max_score in zip(diagnostics, POINTS, strict=True):
         passed = detail is None

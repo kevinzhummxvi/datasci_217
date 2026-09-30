@@ -1,23 +1,24 @@
 """Portable pytest entrypoint for Assignment 04.
 
-The checker is invoked as a subprocess so pytest uses the same artifact
-checks and scoring rules as students and graders.
+The assignment source keeps the tests at repository root for local
+backwards compatibility. This wrapper makes the same tests discoverable from
+the standalone repository's conventional .github/test path.
 """
 
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-import subprocess
 import sys
 
 ASSIGNMENT_DIR = Path(__file__).resolve().parents[2]
+PUBLIC_TESTS = ASSIGNMENT_DIR / "test_assignment.py"
+sys.path.insert(0, str(ASSIGNMENT_DIR))
 
+_spec = spec_from_file_location("_assignment_public_tests", PUBLIC_TESTS)
+if _spec is None or _spec.loader is None:
+    raise ImportError(f"Cannot load tests from {PUBLIC_TESTS}")
+_module = module_from_spec(_spec)
+_spec.loader.exec_module(_module)
 
-def test_assignment_artifacts():
-    result = subprocess.run(
-        [sys.executable, "-B", str(ASSIGNMENT_DIR / "check_assignment.py")],
-        cwd=ASSIGNMENT_DIR,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    detail = (result.stdout + "\n" + result.stderr).strip()
-    assert result.returncode == 0, detail or "checker exited unsuccessfully"
+for _name, _value in vars(_module).items():
+    if _name.startswith("test_"):
+        globals()[_name] = _value

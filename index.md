@@ -9,7 +9,7 @@ notion:
   url: "https://app.notion.com/p/271d9fdd1a1a80c6ab20f6065b01e4e3"
 ---
 
-# *Introduction* to Python & Data Science Tools
+# _Introduction_ to Python & Data Science Tools
 
 DataSci 217 is a practical introduction to the tools and reasoning used in Python data work. The course moves from the command line and Python fundamentals through NumPy, pandas, visualization, time series, modeling, and a complete question-led analysis.
 
@@ -36,6 +36,8 @@ DataSci 217 is a practical introduction to the tools and reasoning used in Pytho
 - [GitHub Codespaces](https://github.com/features/codespaces) (IDE in a browser; free usage quota)
 - [Google Cloud Shell](https://cloud.google.com/shell/docs) (practice command line anywhere)
 
+[WSL Troubleshooting](wsl_troubleshooting.md)
+
 # Course Format
 
 - **Lectures** explain concepts and are presentation materials, not notebooks intended to be executed from top to bottom.
@@ -44,9 +46,9 @@ DataSci 217 is a practical introduction to the tools and reasoning used in Pytho
 
 # Assignments
 
-1. TBD
+1. [https://github.com/UCSF-DataSci/ds217-26f-01](https://github.com/UCSF-DataSci/ds217-26f-01)
 
-Just for fu
+Just for fun:
 
 [Shell Workout](shell_workout.md)
 

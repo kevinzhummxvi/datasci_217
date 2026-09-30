@@ -108,6 +108,17 @@ code, pre {
   border-radius: 4px;
 }
 
+.content figure {
+  margin: 16px 0;
+}
+
+.content figcaption {
+  margin-top: 6px;
+  font-size: 0.9em;
+  font-style: italic;
+  color: #8b949e;
+}
+
 /* Code */
 .content code {
   background: #161b22;
@@ -225,4 +236,30 @@ code, pre {
   .main-content {
     padding: 20px 16px;
   }
+}
+
+/* Notion callouts and side-by-side columns */
+.content .callout {
+  border-left: 4px solid currentColor;
+  padding: 0.25rem 1rem;
+  margin: 1rem 0;
+  background: rgba(127, 127, 127, 0.1);
+}
+.content .columns {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+.content .columns .column {
+  min-width: 0;
+}
+.content .columns img {
+  max-width: 100%;
+}
+
+/* Notion inline highlight, as in <span color="yellow_bg"> */
+.content span[color="yellow_bg"] {
+  background: rgba(251, 243, 219, 0.9);
+  border-radius: 3px;
+  padding: 0 2px;
 }

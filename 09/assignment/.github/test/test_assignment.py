@@ -1,22 +1,24 @@
-"""Public pytest contract for the canonical artifact grader."""
+"""Portable pytest entrypoint for Assignment 09.
 
-import json
+The checks' pytest contract lives in test_assignment.py at the repository
+root. This wrapper makes the same tests discoverable from the standalone
+repository's conventional .github/test path, which GitHub Actions runs.
+"""
+
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-import subprocess
 import sys
 
 ASSIGNMENT_DIR = Path(__file__).resolve().parents[2]
+PUBLIC_TESTS = ASSIGNMENT_DIR / "test_assignment.py"
+sys.path.insert(0, str(ASSIGNMENT_DIR))
 
+_spec = spec_from_file_location("_assignment_public_tests", PUBLIC_TESTS)
+if _spec is None or _spec.loader is None:
+    raise ImportError(f"Cannot load tests from {PUBLIC_TESTS}")
+_module = module_from_spec(_spec)
+_spec.loader.exec_module(_module)
 
-def test_canonical_cli_json_schema():
-    result = subprocess.run(
-        [sys.executable, "-B", str(ASSIGNMENT_DIR / "check_assignment.py"), "--json"],
-        cwd=ASSIGNMENT_DIR,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    payload = json.loads(result.stdout)
-    assert payload["schema"] == "datasci217/grading-result/v1"
-    assert payload["score"] == sum(test["score"] for test in payload["tests"])
+for _name, _value in vars(_module).items():
+    if _name.startswith("test_"):
+        globals()[_name] = _value
