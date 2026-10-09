@@ -11,6 +11,7 @@ import hashlib
 import importlib.util
 import json
 import os
+os.environ["DS217_LOCAL_CHECKS"] = "1"
 from pathlib import Path
 import re
 import subprocess
@@ -383,9 +384,14 @@ def fix(script: str) -> str:
             "and commit output/readiness.txt.")
 
 
-def line_detail(expected: str, yours: str, script: str, same_label: bool = True) -> str:
+def line_detail(expected: str, yours: str, script: str, same_label: bool = True, cause: str = "") -> str:
     place = "yours reads" if same_label else "in its place yours reads"
-    return f"The line should read `{expected}`; {place} `{yours}`. {fix(script)}"
+    cause = f" Likely cause: {cause}" if cause else ""
+    return f"The line should read `{expected}`; {place} `{yours}`.{cause} {fix(script)}"
+
+
+THRESHOLD_CAUSE = ('the label disagrees with a threshold of 20; compare each measurement itself (not a running '
+                   'total) with `>=`, and keep `review_threshold_text = "20"`.')
 
 
 def missing_detail(expected: str, script: str) -> str:
@@ -510,10 +516,14 @@ def run() -> None:
                      .replace("Readiness:", "\n\nReadiness:", 1),
                      EXPECTED_READINESS.replace(FIRST_LINE, "3.13\n", 1).replace("Count: 4\n", "\nCount: 4\n")):
             assert report_scores(text) == 100, text
-        # Characters are graded: a letter's case counts, and the message shows the line with that label.
-        assert report_scores(EXPECTED_READINESS.replace("Project:", "project:")) == 95
-        assert failing(root) == {"report: Project": line_detail("Project: DataSci 217 Assignment 01",
-                                                                "project: DataSci 217 Assignment 01", "readiness.py")}
+        # Equivalent case and numeric notation show the same saved answers.
+        for text in (EXPECTED_READINESS.lower(),
+                     EXPECTED_READINESS.replace("Total: 82", "Total: 82.0").replace("Mean: 20.5", "Mean: 20.50"),
+                     EXPECTED_READINESS.replace("Total: 82", "Total: 8.2e1")):
+            assert report_scores(text) == 100, text
+        assert report_scores(EXPECTED_READINESS.replace("Total: 82", "Total: 80").replace("Mean: 20.5", "Mean: 20")) == 95
+        assert set(failing(root)) == {"report: Total"}
+        assert report_scores(EXPECTED_READINESS.replace("Total: 82", "Total: 80").replace("Mean: 20.5", "Mean: 99")) == 90
 
         # One wrong value costs only its own line, and says what the line should read.
         assert report_scores(EXPECTED_READINESS.replace("Total: 82", "Total: 83")) == 95
@@ -521,13 +531,64 @@ def run() -> None:
         assert report_scores(EXPECTED_READINESS.replace("Script: readiness.py", "Script: TODO")) == 95
         assert failing(root) == {"report: Script": line_detail("Script: readiness.py", "Script: TODO", "readiness.py")}
 
-        # The real submission that compared the running total, double spaced: two lines wrong, 90 points.
-        assert report_scores(RUNNING_TOTAL) == 90
+        # The wrong final classification propagates correctly into its review count: charge it once.
+        assert report_scores(RUNNING_TOTAL) == 95
         assert failing(root) == {
             "report: Measurement 4": line_detail("Measurement: 19 within range", "Measurement: 19 review",
-                                                 "measurement_summary.py"),
-            "report: Review count": line_detail("Review count: 2", "Review count: 3", "measurement_summary.py"),
+                                                 "measurement_summary.py", cause=THRESHOLD_CAUSE),
         }
+
+        # Common beginner mistakes name their likely cause; each still costs only its own line.
+        for wrong, right, cause in (
+            ("Mean: 20", "Mean: 20.5", "`//` drops the decimal part; divide with `/` instead."),
+            ("Next checkpoint: 41", "Next checkpoint: 5", "text was joined to text instead of added; convert "
+             "with `int()` (use `participant_count`) before adding 1."),
+            ("Review count: 4", "Review count: 2", "the counter grows on every pass of the loop; add 1 to it "
+             "only inside the `review` branch of your `if`."),
+        ):
+            script = "debug_report.py" if wrong.startswith("Next") else "measurement_summary.py"
+            assert report_scores(EXPECTED_READINESS.replace(right, wrong)) == 95, wrong
+            assert failing(root) == {f"report: {wrong.partition(':')[0]}": line_detail(
+                right, wrong, script, cause=cause)}, failing(root)
+        assert report_scores(EXPECTED_READINESS.replace("Measurement: 21 review", "Measurement: 21 within range")
+                             .replace("Review count: 2", "Review count: 1")) == 95
+        assert failing(root) == {"report: Measurement 2": line_detail(
+            "Measurement: 21 review", "Measurement: 21 within range", "measurement_summary.py",
+            cause=THRESHOLD_CAUSE)}
+
+        # A supplied value left changed after testing, or the per-measurement print left after the loop, is
+        # one mistake: it is charged once, with its cause, and the lines calculated from it keep their credit.
+        measurement_lines = "".join(line + "\n" for line in EXPECTED_READINESS.splitlines()[3:7])
+        list_cause = "the measurements list was changed; restore `measurements = [18, 21, 24, 19]`."
+        assert report_scores(EXPECTED_READINESS.replace(measurement_lines, "Measurement: 19 within range\n")) == 95
+        assert failing(root) == {"report: Measurement 1": (
+            "output/readiness.txt has 1 Measurement line(s) where the supplied data gives 4; the first missing one "
+            "is `Measurement: 18 within range`. Likely cause: the `print()` for each measurement sits after the "
+            "`for` loop, so it runs only once; indent it inside the loop. " + fix("measurement_summary.py"))}
+        assert report_scores(EXPECTED_READINESS.replace(measurement_lines, measurement_lines + "Measurement: 30 review\n")
+                             .replace("Count: 4", "Count: 5").replace("Total: 82", "Total: 112")
+                             .replace("Mean: 20.5", "Mean: 22.4").replace("Review count: 2", "Review count: 3")) == 95
+        assert failing(root) == {"report: Count": (
+            "The line should read `Count: 4`; yours reads `Count: 5`, matching the 5 Measurement lines saved. "
+            f"Likely cause: {list_cause} " + fix("measurement_summary.py"))}
+        assert report_scores(EXPECTED_READINESS.replace("19 within range", "25 review").replace("Total: 82", "Total: 88")
+                             .replace("Mean: 20.5", "Mean: 22").replace("Review count: 2", "Review count: 3")) == 95
+        assert failing(root) == {"report: Measurement 4": line_detail(
+            "Measurement: 19 within range", "Measurement: 25 review", "measurement_summary.py", cause=list_cause)}
+        assert report_scores(EXPECTED_READINESS.replace("Measurement: 19 within range\n", "")
+                             .replace("Count: 4", "Count: 3").replace("Total: 82", "Total: 63")
+                             .replace("Mean: 20.5", "Mean: 21")) == 95
+        assert list(failing(root)) == ["report: Measurement 4"] and list_cause in failing(root)["report: Measurement 4"]
+        # A mean that does not divide evenly, as Python prints it, still counts as calculated from the student's values.
+        assert report_scores(EXPECTED_READINESS.replace("Measurement: 18 within range\n", "")
+                             .replace("Count: 4", "Count: 3").replace("Total: 82", "Total: 64")
+                             .replace("Mean: 20.5", f"Mean: {64 / 3}")) == 95
+        assert list(failing(root)) == ["report: Measurement 1"] and list_cause in failing(root)["report: Measurement 1"]
+        assert report_scores(EXPECTED_READINESS.replace("Participant count: 4", "Participant count: 6")
+                             .replace("Next checkpoint: 5", "Next checkpoint: 7")) == 95
+        assert failing(root) == {"report: Participant count": line_detail(
+            "Participant count: 4", "Participant count: 6", "debug_report.py",
+            cause='the participant count was changed; restore `participant_count_text = "4"`.')}
 
         # A missing line costs only itself, and an extra line, such as a leftover debug print, costs nothing:
         # the lines after either one are still matched.
@@ -546,9 +607,9 @@ def run() -> None:
                              .replace("24 review", "24 within range")) == 90
         assert failing(root) == {
             "report: Measurement 2": line_detail("Measurement: 21 review", "Measurement: 21 within range",
-                                                 "measurement_summary.py"),
+                                                 "measurement_summary.py", cause=THRESHOLD_CAUSE),
             "report: Measurement 3": line_detail("Measurement: 24 review", "Measurement: 24 within range",
-                                                 "measurement_summary.py"),
+                                                 "measurement_summary.py", cause=THRESHOLD_CAUSE),
         }
         # A line with the wrong label is shown beside the line it should read when it stands in that line's place.
         assert report_scores(EXPECTED_READINESS.replace("Review count: 2", "Reviews: 2")) == 95
@@ -579,7 +640,7 @@ def run() -> None:
             "(Task 3.3), which create the folder, and commit the two files they save."}
 
     print("Assignment 01 checks: every roster hash, identity and report failures on their own, the running-total "
-          "submission at 90, whitespace, blank and extra lines, and the Python version line ungraded, a missing "
+          "submission at 95, whitespace, blank and extra lines, and the Python version line ungraded, a missing "
           "line costing only itself, and each failing line saying what it should read and which script and task "
           "to fix, all score as the contract states.")
 
@@ -603,7 +664,7 @@ def run_handout() -> None:
     """The handout carries the course's checks unchanged, so a local run gives what GitHub gives."""
     files = checks_files()
     course_owned = {path.relative_to(CHECKS).as_posix() for path in CHECKS.rglob("*")
-                    if path.is_file() and not {"__pycache__", ".pytest_cache", "_grader_selftest"} & set(path.parts)}
+                    if path.is_file() and not {"__pycache__", ".pytest_cache", "_grader_selftest", ".checks"} & set(path.parts)}
     assert sorted(files) == sorted(course_owned - {"README.md"}), (files, course_owned)
     for name in files:
         assert (ASSIGNMENT / name).read_bytes() == (CHECKS / name).read_bytes(), f"01/assignment/{name} differs"
@@ -613,7 +674,9 @@ def run_handout() -> None:
     readme = (ASSIGNMENT / "README.md").read_text(encoding="utf-8")
     for line in EXPECTED_READINESS.splitlines():
         assert f"\n{line}\n" in readme, line
-    contract = readme.partition("### Completion contract\n")[2].partition("\n## ")[0]
+    assert "(CHECKS.md)" in readme, "README.md no longer links CHECKS.md"
+    checks_md = (ASSIGNMENT / "CHECKS.md").read_text(encoding="utf-8")
+    contract = checks_md.partition("## Completion contract\n")[2].partition("\n## ")[0]
     assert f"Grading totals {sum(POINTS)} points" in contract
     rows = re.findall(r"^\| `.+ \| (\d+)(?: \((\d+) each\))? \|$", contract, re.M)
     points = dict(zip(TEST_NAMES, POINTS, strict=True))
@@ -639,9 +702,9 @@ def run_handout() -> None:
             assert local.stdout == course.stdout and local.returncode == course.returncode, (name, local, course)
             assert json.loads(local.stdout) == grade_submission(root), name
         shown = checker(ASSIGNMENT, submissions["running total"])
-        assert shown.returncode == 1 and "Score: 75/100\n" in shown.stdout, shown.stdout
+        assert shown.returncode == 1 and "Score: 80/100\n" in shown.stdout, shown.stdout
         assert "yours reads `Measurement: 19 review`" in shown.stdout, shown.stdout
-        assert shown.stdout.endswith("Left to fix (25 points): output/readiness.txt: Measurement 4 and Review count; "
+        assert shown.stdout.endswith("Left to fix (20 points): output/readiness.txt: Measurement 4; "
                                      "output/student_identity.txt: identity hash on the roster.\n"), shown.stdout
 
         # A fix shared by the checks right after it is printed once, and the report ends by naming what is left.
@@ -660,13 +723,13 @@ def run_handout() -> None:
         practice(wrong_total)
         outputs(wrong_total, EXPECTED_READINESS.replace("Total: 82", "Total: 83"), ROSTER_HASH + "\n")
         shown = checker(ASSIGNMENT, wrong_total)
-        quoted = re.search(r"as in `(Left to fix [^`]*)`", readme)
+        quoted = re.search(r"as in `(Left to fix [^`]*)`", checks_md)
         assert quoted and shown.stdout.endswith(f"Score: 95/100\n{quoted.group(1)}\n"), (shown.stdout, quoted)
 
         # A clean local run ends the way the README promises.
         shown = checker(ASSIGNMENT, submissions["complete"])
         assert shown.returncode == 0, shown.stdout + shown.stderr
-        promised = re.search(r"A clean local run ends with:\n\n```text\n(.*?)```", readme, re.S)
+        promised = re.search(r"A clean local run ends with:\n\n```text\n(.*?)```", checks_md, re.S)
         assert promised and shown.stdout.endswith(promised.group(1)), (shown.stdout, promised)
 
     print(f"Assignment 01 handout: {len(files)} check files byte-identical to 01/assignment_checks/, no shape "
@@ -733,7 +796,7 @@ def run_equivalence() -> None:
             if name in ("complete", "extra files everywhere") or name.startswith("report expected + roster hash"):
                 assert new_score == 100, (name, now)
             if name == "report running total compared, double spaced + identity roster hash":
-                assert new_score == 90, (name, now)
+                assert new_score == 95, (name, now)
             if name in (f"report {report} + identity roster hash" for report in FULL_MARKS_REPORTS):
                 assert new_score == 100, (name, now)
             if name.endswith("unreadable + identity roster hash"):

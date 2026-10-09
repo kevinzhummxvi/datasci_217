@@ -14,96 +14,64 @@ jupyter:
 
 # Demo 4: Compare, freeze, and report
 
-**Assignment patterns:** Q7 modeling, Q8 results, and Q9 reporting.
+- Compare the weekly baseline, "same hour last week" (`lag_168`), with one scikit-learn pipeline on the validation rows.
+- The lower validation MAE freezes the choice.
+- Refit on training plus validation rows and evaluate both candidates on June exactly once.
+- Look at where the errors fall.
 
-We compare a fixed weekly baseline (`lag_168`) with one transparent scikit-learn
-pipeline. Validation MAE freezes the choice. Only then do we combine train and
-validation, refit the pipeline if selected, and evaluate June exactly once.
+There is no performance threshold: honest evaluation and clear evidence are the goals.
 
-There is no performance threshold. This demo focuses on model selection and
-evaluation; Assignment Q7 also applies the permutation-importance pattern from
-Lecture 10 Demo 2. Honest evaluation and clear evidence are the goals.
-
-## One setup cell
+Run the cells from top to bottom; an **Expect** line after each step says what you should see.
 
 ```python
-import importlib.metadata as metadata
-import importlib.util
-import subprocess
-import sys
+# Installs the course's pandas in Colab (uv sync already did locally); if Colab asks, restart and rerun from the top
+%pip install -q --no-warn-conflicts pandas==3.0.5
+```
 
-REQUIRED = {
-    "numpy": "2.3.3", "pandas": "3.0.5", "pyarrow": "25.0.0",
-    "scikit-learn": "1.9.0", "matplotlib": "3.11.1",
-}
-missing = []
-for package, version in REQUIRED.items():
-    try:
-        installed = metadata.version(package)
-    except metadata.PackageNotFoundError:
-        installed = None
-    if installed != version:
-        missing.append(f"{package}=={version}")
-if missing:
-    if importlib.util.find_spec("pip") is None:
-        subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", *missing])
+This notebook reads the release manifest and the zone-hour panel. This supplied cell keeps any file already in `data/` and downloads the rest.
 
+```python
+import hashlib
+import json
 from pathlib import Path
 from urllib.request import urlretrieve
 
-import hashlib
-import json
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from IPython.display import display
 from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-RANDOM_STATE = 217  # Ridge is deterministic and has no random_state parameter.
-print(f"Python {sys.version.split()[0]} | scikit-learn {metadata.version('scikit-learn')}")
+REPO_RAW = "https://raw.githubusercontent.com/christopherseaman/datasci_217/main/11/demo/data"
+data_dir = Path("data")
+data_dir.mkdir(exist_ok=True)
+for filename in ["demo_release_manifest.json", "yellow_taxi_2023_h1_zone_hour_counts.parquet"]:
+    path = data_dir / filename
+    if not path.exists():
+        urlretrieve(f"{REPO_RAW}/{filename}", path)
+    print(filename, path.stat().st_size, "bytes")
 ```
 
-## Independently rebuild the model table and split
+**Expect:** two lines: `demo_release_manifest.json 3585 bytes` and `yellow_taxi_2023_h1_zone_hour_counts.parquet 138733 bytes`.
 
-Fresh Colab downloads only the compact released panel. Release URLs use `main`
-for the published course materials.
+## 1. Rebuild the model table and the split
+
+This supplied cell repeats Demo 2's hash check and `build_model_table()` and Demo 3's split unchanged.
 
 ```python
-REPO_RAW = "https://raw.githubusercontent.com/christopherseaman/datasci_217/main/11/demo/data"
-
-def acquire_authenticated_panel():
-    filenames = ["demo_release_manifest.json", "yellow_taxi_2023_h1_zone_hour_counts.parquet"]
-    for directory in (Path("data"), Path("11/demo/data")):
-        if all((directory / filename).exists() for filename in filenames):
-            break
-    else:
-        directory = Path("data")
-        directory.mkdir(exist_ok=True)
-        for filename in filenames:
-            path = directory / filename
-            if not path.exists():
-                urlretrieve(f"{REPO_RAW}/{filename}", path)
-
-    manifest_path = directory / filenames[0]
-    panel_path = directory / filenames[1]
-    expected_manifest_sha256 = "558c28a8ab5a16769ac6ef9d170e7bd7f4ae4ef5d2a9e2b11fd2fb84d79b2c9d"
-    expected_panel_sha256 = "f1f55ea809119757ee26995ae1eae4ff6be21b70273194c35aa388cfbfe13ad3"
-    assert hashlib.sha256(manifest_path.read_bytes()).hexdigest() == expected_manifest_sha256, (
-        "Manifest hash mismatch"
-    )
-    manifest = json.loads(manifest_path.read_text())
-    assert manifest["artifacts"]["panel"]["sha256"] == expected_panel_sha256
-    assert hashlib.sha256(panel_path.read_bytes()).hexdigest() == expected_panel_sha256, (
-        "Panel hash mismatch"
-    )
-    print("Authenticated manifest and panel SHA-256 digests.")
-    return pd.read_parquet(panel_path)
+manifest_path = data_dir / "demo_release_manifest.json"
+published_manifest_sha256 = "558c28a8ab5a16769ac6ef9d170e7bd7f4ae4ef5d2a9e2b11fd2fb84d79b2c9d"
+assert hashlib.sha256(manifest_path.read_bytes()).hexdigest() == published_manifest_sha256, "The manifest changed: rename it in data/ and rerun from the top"
+with open(manifest_path) as file:
+    manifest = json.load(file)
+panel_path = data_dir / manifest["artifacts"]["panel"]["filename"]
+panel_sha256 = hashlib.sha256(panel_path.read_bytes()).hexdigest()
+assert panel_sha256 == manifest["artifacts"]["panel"]["sha256"], "The panel changed: rename it in data/ and rerun"
+panel = pd.read_parquet(panel_path)
 
 def build_model_table(panel):
     table = panel.sort_values(["pickup_zone_id", "target_hour_utc"]).copy()
@@ -112,7 +80,8 @@ def build_model_table(panel):
     table["hour_of_day"] = local.dt.hour
     table["day_of_week"] = local.dt.dayofweek
     table["month"] = local.dt.month
-    table["is_weekend"] = local.dt.dayofweek.ge(5).astype("int8")
+    table["is_weekend"] = (local.dt.dayofweek >= 5).astype("int8")
+
     grouped = table.groupby("pickup_zone_id", sort=False)["pickup_count"]
     for lag in (1, 24, 168):
         table[f"lag_{lag}"] = grouped.shift(lag)
@@ -120,38 +89,38 @@ def build_model_table(panel):
         table[f"rolling_mean_{window}"] = grouped.transform(
             lambda values: values.shift(1).rolling(window, min_periods=window).mean()
         )
-    history = ["lag_1", "lag_24", "lag_168", "rolling_mean_24", "rolling_mean_168"]
-    return table.dropna(subset=history).sort_values(
+
+    history_columns = ["lag_1", "lag_24", "lag_168", "rolling_mean_24", "rolling_mean_168"]
+    return table.dropna(subset=history_columns).sort_values(
         ["target_hour_utc", "pickup_zone_id"]
     ).reset_index(drop=True)
 
-table = build_model_table(acquire_authenticated_panel())
-local_naive = table["target_hour_local"].dt.tz_localize(None)
-train = table.loc[local_naive.lt("2023-05-01")].copy()
-validation = table.loc[local_naive.between("2023-05-01", "2023-06-01", inclusive="left")].copy()
-test = table.loc[local_naive.ge("2023-06-01")].copy()
+table = build_model_table(panel)
+validation_start = pd.Timestamp("2023-05-01", tz="America/New_York")
+test_start = pd.Timestamp("2023-06-01", tz="America/New_York")
+target_time = table["target_hour_utc"]
+train = table[target_time < validation_start].copy()
+validation = table[(target_time >= validation_start) & (target_time < test_start)].copy()
+test = table[target_time >= test_start].copy()
 
-assert len(table) == 50_100
-assert len(train) + len(validation) + len(test) == len(table)
-print({"train": len(train), "validation": len(validation), "test": len(test)})
+display(pd.DataFrame({"rows": {"train": len(train), "validation": len(validation), "test": len(test)}}))
 ```
 
-## Define metrics, baseline, and one pipeline
+**Expect:** a three-row table: `train` 32532, `validation` 8928, `test` 8640, the split from Demo 3.
 
-The model receives mixed-type data, so `ColumnTransformer` routes the zone column
-through a categorical branch and the numeric columns through a numeric branch.
-The categorical branch imputes a missing zone label from the training data, then
-uses `OneHotEncoder(handle_unknown="ignore")`: a zone that was absent when the
-model was fitted does not crash validation or test prediction. The numeric branch
-imputes missing values with training medians and then scales the numeric columns.
-This fixture has no missing predictors after feature construction, so the imputers
-are pipeline robustness rather than evidence that missingness was handled here.
+## 2. One pipeline and one baseline, judged on validation
 
-Every learned preprocessing value (category levels, numeric medians, and scaling
-statistics) is fitted on training data and reused unchanged for validation and test.
-That keeps later periods from influencing model selection or evaluation. The
-encoder's `sparse_output=False` is a convenience for this small Ridge example;
-dense output is not a universal rule for larger or wider feature matrices.
+The features mix types, so a `ColumnTransformer` sends the zone ID through a categorical branch and the other nine features through a numeric branch:
+
+- **Zone:** `OneHotEncoder(handle_unknown="ignore")` gives each zone its own 0/1 column, so zone 239 is not treated as larger than zone 132; a zone the model never saw would get all zeros instead of an error. `sparse_output=False` returns an ordinary table, which is fine at this size.
+- **Numbers:** `StandardScaler` puts the features on one scale, which Ridge's penalty needs.
+- **Imputers:** each branch first fills missing values from the training rows. This table has none, so they change nothing here.
+
+Other pieces:
+
+- Every learned value (zone list, medians, scaling statistics) comes from the rows passed to `fit`, here the training rows, and is reused unchanged on validation and test.
+- `Ridge(alpha=10.0)` is linear regression with a penalty that keeps coefficients small. `random_state` only affects its `sag` and `saga` solvers, so setting it records the seed without changing results here.
+- A pickup count cannot be negative, so `np.maximum(values, 0)` raises any negative prediction to 0.
 
 ```python
 CATEGORICAL = ["pickup_zone_id"]
@@ -176,70 +145,73 @@ preprocessor = ColumnTransformer([
 ])
 ridge_pipeline = Pipeline([
     ("preprocess", preprocessor),
-    ("model", Ridge(alpha=10.0)),
+    ("model", Ridge(alpha=10.0, random_state=217)),
 ])
 
-def clipped_predictions(values):
-    return np.clip(np.asarray(values, dtype=float), 0, None)
-
-def metrics(y_true, y_pred):
+def score(split, candidate, y_true, y_pred):
     return {
+        "split": split,
+        "candidate": candidate,
         "MAE": mean_absolute_error(y_true, y_pred),
-        "RMSE": mean_squared_error(y_true, y_pred) ** 0.5,
+        "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
     }
 
 ridge_pipeline.fit(train[FEATURES], train[TARGET])
 validation_predictions = {
-    "lag_168_baseline": clipped_predictions(validation["lag_168"]),
-    "ridge_pipeline": clipped_predictions(ridge_pipeline.predict(validation[FEATURES])),
+    "lag_168_baseline": np.maximum(validation["lag_168"], 0),
+    "ridge_pipeline": np.maximum(ridge_pipeline.predict(validation[FEATURES]), 0),
 }
 validation_scores = pd.DataFrame([
-    {"candidate": name, **metrics(validation[TARGET], predictions)}
+    score("validation", name, validation[TARGET], predictions)
     for name, predictions in validation_predictions.items()
-]).sort_values(["MAE", "RMSE"]).reset_index(drop=True)
-display(validation_scores)
+]).sort_values("MAE").reset_index(drop=True)
+display(validation_scores.round(1))
 ```
 
-## Freeze the choice, then evaluate test once
+**Expect:** two rows sorted by MAE: `ridge_pipeline` (MAE 25.0, RMSE 36.5), then `lag_168_baseline` (MAE 29.4, RMSE 46.4). On May's hours the pipeline misses by about 25 pickups per zone-hour, against about 29 for "same hour last week".
 
-The next line is the only selection step. After it runs, validation has done its
-job. Test predictions are made once and are not used to revise the decision.
+## 3. Freeze the choice, then evaluate test once
+
+- The `selected_candidate` line is the only selection step: the lower validation MAE.
+- The pipeline is then refit on training plus validation rows with the same settings.
+- Both candidates are scored on June once; nothing afterwards changes the choice.
 
 ```python
 selected_candidate = validation_scores.loc[0, "candidate"]
-development = pd.concat([train, validation], ignore_index=True)
-
-if selected_candidate == "ridge_pipeline":
-    final_estimator = ridge_pipeline.fit(development[FEATURES], development[TARGET])
-    test_prediction = clipped_predictions(final_estimator.predict(test[FEATURES]))
-else:
-    final_estimator = None
-    test_prediction = clipped_predictions(test["lag_168"])
-
-test_scores = metrics(test[TARGET], test_prediction)
-metrics_table = pd.concat([
-    validation_scores.assign(split="validation", selected=lambda x: x["candidate"].eq(selected_candidate)),
-    pd.DataFrame([{
-        "candidate": selected_candidate, **test_scores, "split": "test", "selected": True,
-    }]),
-], ignore_index=True)
-
 print("Frozen candidate:", selected_candidate)
-display(metrics_table)
-assert selected_candidate in validation_scores["candidate"].tolist()
-assert np.isfinite(test_prediction).all() and (test_prediction >= 0).all()
+
+development = pd.concat([train, validation], ignore_index=True)
+ridge_pipeline.fit(development[FEATURES], development[TARGET])
+test_predictions = {
+    "lag_168_baseline": np.maximum(test["lag_168"], 0),
+    "ridge_pipeline": np.maximum(ridge_pipeline.predict(test[FEATURES]), 0),
+}
+test_scores = pd.DataFrame([
+    score("test", name, test[TARGET], predictions)
+    for name, predictions in test_predictions.items()
+])
+
+metrics_table = pd.concat([validation_scores, test_scores], ignore_index=True)
+metrics_table["selected"] = metrics_table["candidate"] == selected_candidate
+display(metrics_table.round(1))
 ```
 
-## Save predictions and useful error slices
+**Expect:** `Frozen candidate: ridge_pipeline`, then a four-row table (MAE, RMSE):
 
-Overall metrics can hide where errors occur. We report test errors by zone and by
-local hour. Small CSVs are evidence; the large reusable table remains Parquet.
+- validation: pipeline 25.0, 36.5; baseline 29.4, 46.4.
+- test: baseline 32.3, 50.2; pipeline 25.6, 37.8.
+- `selected` is True on the pipeline's rows.
+
+The test result supports the candidate claim for June 2023: the pipeline beat "same hour last week" by about 7 pickups per zone-hour.
+
+## 4. Save the predictions and look at error slices
+
+An overall MAE can hide where the errors are. Group the frozen candidate's test errors by zone and by local hour, and save them: small summaries as CSV for people, the full prediction table as Parquet for later code.
 
 ```python
-predictions = test[[
-    "pickup_zone_id", "target_hour_utc", "target_hour_local", "hour_of_day", "pickup_count"
-]].rename(columns={"pickup_count": "actual"})
-predictions["prediction"] = test_prediction
+predictions = test[["pickup_zone_id", "target_hour_utc", "target_hour_local", "hour_of_day", TARGET]]
+predictions = predictions.rename(columns={TARGET: "actual"})
+predictions["prediction"] = test_predictions[selected_candidate]
 predictions["absolute_error"] = (predictions["actual"] - predictions["prediction"]).abs()
 predictions["squared_error"] = (predictions["actual"] - predictions["prediction"]) ** 2
 
@@ -251,13 +223,13 @@ def error_slice(frame, group_column):
         MAE=("absolute_error", "mean"),
         mean_squared_error=("squared_error", "mean"),
     )
-    result["RMSE"] = np.sqrt(result.pop("mean_squared_error"))
-    return result
+    result["RMSE"] = np.sqrt(result["mean_squared_error"])
+    return result.drop(columns="mean_squared_error")
 
 zone_errors = error_slice(predictions, "pickup_zone_id")
 hour_errors = error_slice(predictions, "hour_of_day")
-display(zone_errors)
-display(hour_errors)
+display(zone_errors.sort_values("MAE", ascending=False).round(1))
+display(hour_errors.round(1))
 
 output_dir = Path("output")
 output_dir.mkdir(exist_ok=True)
@@ -267,10 +239,21 @@ zone_errors.to_csv(output_dir / "04_zone_error_summary.csv", index=False)
 hour_errors.to_csv(output_dir / "04_hour_error_summary.csv", index=False)
 ```
 
-## Make two ordinary report figures
+**Expect:**
 
-These figures answer common reporting questions without adding decorative
-complexity: how predictions track actual counts over time, and where MAE is larger.
+- A 12-row zone table with 720 test hours per zone: zone 132 (JFK) at MAE 36.5 and zone 138 (LaGuardia) at 35.5 lead; zones 170 and 239 end at about 17.5.
+- A 24-row hour table: MAE is smallest overnight (5.2 at 04:00) and largest in the evening (40.8 at 18:00).
+
+The airports have the largest misses even though LaGuardia averages fewer pickups than several Manhattan zones, so they are the first place to look for a missing feature.
+
+## 5. Make two report figures
+
+Two figures answer the common report questions:
+
+- Do the predictions track the actual counts over time?
+- At which hours are the misses largest?
+
+Rotating the date labels with `tick_params` keeps them from overlapping.
 
 ```python
 hourly = predictions.groupby("target_hour_utc", as_index=False)[["actual", "prediction"]].sum()
@@ -278,6 +261,7 @@ figure, axis = plt.subplots(figsize=(11, 4))
 axis.plot(hourly["target_hour_utc"], hourly["actual"], label="Actual", linewidth=1)
 axis.plot(hourly["target_hour_utc"], hourly["prediction"], label="Prediction", linewidth=1)
 axis.set(title="June hourly pickups across 12 zones", xlabel="Target hour (UTC)", ylabel="Pickups")
+axis.tick_params(axis="x", rotation=30)
 axis.legend()
 figure.tight_layout()
 figure.savefig(output_dir / "04_actual_vs_predicted.png", dpi=150)
@@ -291,22 +275,27 @@ figure.savefig(output_dir / "04_mae_by_hour.png", dpi=150)
 plt.show()
 ```
 
+**Expect:**
+
+- A line chart of June's total hourly pickups, with the prediction line closely following the actual line's daily rises and falls.
+- A bar chart with short bars overnight and tallest from late afternoon to late evening.
+
 ## Final checks
 
 ```python
 assert len(predictions) == len(test)
 assert predictions[["actual", "prediction", "absolute_error"]].notna().all().all()
 assert len(zone_errors) == 12 and len(hour_errors) == 24
-assert np.isclose(test_scores["MAE"], predictions["absolute_error"].mean())
-assert np.isclose(test_scores["RMSE"], np.sqrt(predictions["squared_error"].mean()))
-for filename in (
+selected_test = test_scores[test_scores["candidate"] == selected_candidate].iloc[0]
+assert round(selected_test["MAE"], 6) == round(predictions["absolute_error"].mean(), 6)
+for filename in [
     "04_test_predictions.parquet", "04_metrics.csv", "04_zone_error_summary.csv",
     "04_hour_error_summary.csv", "04_actual_vs_predicted.png", "04_mae_by_hour.png",
-):
+]:
     assert (output_dir / filename).stat().st_size > 0
 
-print(
-    f"Final checks passed: {selected_candidate} test MAE={test_scores['MAE']:.3f}, "
-    f"RMSE={test_scores['RMSE']:.3f}; six evidence files saved."
-)
+print(f"Final checks passed: {selected_candidate} test MAE={selected_test['MAE']:.3f}, "
+      f"RMSE={selected_test['RMSE']:.3f}; six evidence files saved.")
 ```
+
+**Expect:** `Final checks passed: ridge_pipeline test MAE=25.588, RMSE=37.801; six evidence files saved.` The `output/` folder now holds the six files, including `04_zone_error_summary.csv`, which the optional Demo 5 maps.

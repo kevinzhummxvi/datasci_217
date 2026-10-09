@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -22,6 +23,9 @@ import tempfile
 import numpy as np
 import pandas as pd
 
+
+# Self-tests grade with the working copy, never the copy downloaded from GitHub.
+os.environ["DS217_LOCAL_CHECKS"] = "1"
 
 CHECKS = Path(__file__).resolve().parents[1]
 HANDOUT = CHECKS.parent / "assignment"
@@ -33,6 +37,7 @@ import grading  # noqa: E402
 DATA = HANDOUT / "data" / "people_raw.csv"
 FIXTURE = HANDOUT / "data" / "fixture.json"
 README = HANDOUT / "README.md"
+CHECKS_MD = HANDOUT / "CHECKS.md"
 EXACT_DATE = r"[0-9]{4}-[0-9]{2}-[0-9]{2}"
 AGE_SENTINELS = ["unknown", "-9"]
 STATUS_SENTINEL = "NA"
@@ -48,6 +53,13 @@ HEADERS = {
     "cleaned_people.csv": ",".join(grading.CLEANED_COLUMNS),
     "decision_log.csv": ",".join(grading.DECISION_COLUMNS),
 }
+
+
+def nan_age_summary() -> dict[str, float]:
+    """The summary of Lecture 05's `where` array, which blanks the invalid ages but keeps their rows as NaN."""
+    num = pd.to_numeric(pd.read_csv(DATA, dtype="string")["age_text"], errors="coerce")
+    ages = np.array(num.where(num.between(0, 120) & num.mod(1).eq(0)), dtype=float)
+    return {"count": ages.size, "min": ages.min(), "max": ages.max(), "sum": ages.sum(), "mean": ages.mean()}
 
 
 def readme_audit_labels() -> list[str]:
@@ -70,21 +82,21 @@ def readme_checklist() -> dict[str, tuple[str, int]]:
     return {name: (header, int(lines)) for name, header, lines in rows}
 
 
-def readme_contract() -> dict[str, int]:
-    """Each output file's points from the README's Completion contract table."""
+def checks_contract() -> dict[str, int]:
+    """Each output file's points from the CHECKS.md's Completion contract table."""
     points = {}
-    for line in README.read_text(encoding="utf-8").splitlines():
+    for line in CHECKS_MD.read_text(encoding="utf-8").splitlines():
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
         if len(cells) == 3 and (name := re.fullmatch(r"`output/([^`]+)`", cells[0])) and cells[2].isdigit():
             points[name.group(1)] = int(cells[2])
     return points
 
 
-def readme_review_points() -> int:
-    """The human-review points in the README's rubric: each category's full credit times the categories."""
+def checks_review_points() -> int:
+    """The human-review points in the CHECKS.md's rubric: each category's full credit times the categories."""
     table = re.search(r"^\| Category \| What it reads \| Full credit \((\d+)\) \|.*\n\|[- |]+\|\n((?:\|.*\n)+)",
-                      README.read_text(encoding="utf-8"), re.M)
-    assert table, "the README shows no human-review rubric table"
+                      CHECKS_MD.read_text(encoding="utf-8"), re.M)
+    assert table, "CHECKS.md shows no human-review rubric table"
     return int(table.group(1)) * len(table.group(2).splitlines())
 
 
@@ -254,13 +266,15 @@ def loose(files: dict[str, str]) -> dict[str, str | bytes]:
     numpy_rows["metric"] = numpy_rows["metric"].str.upper()
     variant["numpy_age_summary.csv"] = "﻿" + numpy_rows.iloc[::-1][["value", "metric"]].to_csv()
     variant["pandas_selection.csv"] = edit_csv(files["pandas_selection.csv"], lambda table: table.assign(
-        site=table["site"].str.strip().str.lower(), status=table["status"].str.upper())
+        record_id=table["record_id"].str.lower(), site=table["site"].str.strip(), status=" " + table["status"])
         .iloc[::-1][["status", "record_id", "site"]])
     variant["issue_audit.csv"] = crlf(edit_csv(files["issue_audit.csv"], lambda table: table.assign(
         issue=table["issue"].str.upper().str.replace("-", " "), count=table["count"] + ".0").iloc[::-1]))
     cleaned = pd.read_csv(io.StringIO(files["cleaned_people.csv"]), dtype="string",
                           keep_default_na=False)
     cleaned["record_id"] = cleaned["record_id"].str.lower()
+    for column in ("full_name", "site", "status"):
+        cleaned[column] = " " + cleaned[column].str.upper() + " "
     cleaned["age"] = cleaned["age"].replace("", "NaN").where(cleaned["age"].eq(""), cleaned["age"] + ".0")
     cleaned["visit_date"] = cleaned["visit_date"].where(cleaned["visit_date"].eq(""),
                                                         cleaned["visit_date"] + " 00:00:00")
@@ -278,30 +292,31 @@ def run() -> None:
     files = solve()
 
     readme = README.read_text(encoding="utf-8")
+    checks_md = CHECKS_MD.read_text(encoding="utf-8")
     checklist = readme_checklist()
     assert set(checklist) == set(files), ("README checklist rows", sorted(checklist))
     for name, text in files.items():
         header, count = checklist[name]
         assert header == HEADERS[name], (name, header)
         assert len(text.splitlines()) == count, (name, count, len(text.splitlines()))
-        tree = readme.split("## The data")[0]
+        tree = readme.split("## Task 1")[0]
         assert re.search(rf"── {re.escape(name)} +# you make in Task", tree), (name, "missing from the file tree")
     graded: dict[str, int] = {}
     for check in grading.CHECKS:
         file_name = check.name.split(":")[0]
         graded[file_name] = graded.get(file_name, 0) + check.points
-    assert readme_contract() == graded, ("README Completion contract points", readme_contract(), graded)
-    review = readme_review_points()
+    assert checks_contract() == graded, ("README Completion contract points", checks_contract(), graded)
+    review = checks_review_points()
     assert grading.MAX_SCORE + review == 100 and check_assignment.HUMAN_REVIEW_POINTS == review, review
     assert (f"{grading.MAX_SCORE} points graded from your committed files after the deadline, "
-            f"{review} by human review") in readme, "the README states a different point split"
+            f"{review} by human review") in checks_md, "CHECKS.md states a different point split"
     # Every line of every answer file except the labels and headers the README has to show.
     shown = {HEADERS[name] for name in files} | {"$ tail -n 2 data/people_raw.csv", ",".join(RAW_COLUMNS)}
     leaks = [line for name in files if name != "decision_log.csv"
-             for line in files[name].splitlines() if line not in shown and line in readme]
+             for line in files[name].splitlines() if line not in shown and line in readme + checks_md]
     assert not leaks, ("the README publishes expected values", leaks)
     for phrase in ("check_assignment", "GitHub Actions", "final newline", "grading.py", "automated feedback"):
-        assert phrase not in readme, ("the exam README mentions", phrase)
+        assert phrase not in readme + checks_md, ("the exam README mentions", phrase)
 
     shipped = [name for name in ("check_assignment.py", "grading.py", "test_assignment.py", "_grader_selftest",
                                  ".github", ".badmath.toml") if (HANDOUT / name).exists()]
@@ -350,14 +365,44 @@ def run() -> None:
             table.loc[table["record_id"].eq(record_id), column] = value
             return table
 
+        source_lines = DATA.read_text(encoding="utf-8").splitlines()
+        repeated_audit = pd.read_csv(io.StringIO(files["issue_audit.csv"]), dtype="string")
+        wrong_count = repeated_audit[["count"]].copy()
+        wrong_count.iloc[0, 0] = "999"
+        repeated_audit_text = pd.concat([wrong_count, repeated_audit], axis=1).to_csv(index=False)
+
         mutations = {
+            "an audit file with embedded NUL": (
+                {"issue_audit.csv": files["issue_audit.csv"] + "\x00"},
+                {"issue_audit.csv": 15}, ("output/issue_audit.csv", "embedded NUL")),
+            "a cleaned table with only unknown record IDs": (
+                {"cleaned_people.csv": ",".join(grading.CLEANED_COLUMNS) + "\nwrong,,,,,,\n"},
+                {f"cleaned_people.csv: {column}": 4 for column in grading.CLEANED_COLUMNS},
+                ("output/cleaned_people.csv",)),
+            "conflicting repeated audit count columns": (
+                {"issue_audit.csv": repeated_audit_text},
+                {"issue_audit.csv": 1}, ("schema mismatch", "conflicting repeated count columns")),
+            "conflicting repeated issue rows": (
+                {"issue_audit.csv": files["issue_audit.csv"] + "schema mismatch,999\n"},
+                {"issue_audit.csv": 1}, ("schema mismatch", "conflicting repeated schema mismatch rows")),
+            "equivalent repeated issue rows": (
+                {"issue_audit.csv": files["issue_audit.csv"] + "SCHEMA MISMATCH,0.00\n"}, {}, ()),
+            "conflicting repeated summary keys": (
+                {"pipeline_summary.txt": files["pipeline_summary.txt"] + "raw_columns=999\n"},
+                {"pipeline_summary.txt": 1}, ("raw_columns", "conflicting repeated raw_columns rows")),
+            "a cleaned table with only its header": (
+                {"cleaned_people.csv": ",".join(grading.CLEANED_COLUMNS) + "\n"},
+                {f"cleaned_people.csv: {column}": 4 for column in grading.CLEANED_COLUMNS}, ()),
+            "a different patient name": (
+                {"cleaned_people.csv": cleaned(lambda t: at(t, "R001", "full_name", "Someone Else"))},
+                {"cleaned_people.csv: full_name": 1}, ("R001", "Someone Else")),
             "R011's age of 0 written blank": (
                 {"cleaned_people.csv": cleaned(lambda t: at(t, "R011", "age", ""))},
                 {"cleaned_people.csv: age": 1}, ("R011", "age")),
             "R007's 40.5 rounded to 40 and flagged from it": (
                 {"cleaned_people.csv": cleaned(lambda t: at(at(t, "R007", "age", "40"), "R007", "needs_review",
                                                             "False"))},
-                {"cleaned_people.csv: age": 1}, ("R007",)),
+                {"cleaned_people.csv: age": 1}, ("R007", "% 1 == 0")),
             "R009's 2026-7-01 accepted as a date": (
                 {"cleaned_people.csv": cleaned(lambda t: at(at(t, "R009", "visit_date", "2026-07-01"), "R009",
                                                             "needs_review", "False"))},
@@ -368,7 +413,7 @@ def run() -> None:
             "sites stripped but not lowercased": (
                 {"cleaned_people.csv": cleaned(lambda t: at(at(at(t, "R001", "site", "North"), "R003", "site",
                                                                 "SOUTH"), "R010", "site", "West"))},
-                {"cleaned_people.csv: site": 2}, ("R001", "'North'")),
+                {}, ()),
             "the exact duplicate kept, and counted in rows_after": (
                 {"cleaned_people.csv": cleaned(lambda t: pd.concat([t.iloc[:2], t.iloc[1:]])),
                  "decision_log.csv": decisions(lambda t: t.assign(rows_after="12"))},
@@ -379,8 +424,7 @@ def run() -> None:
             "rows with any gap dropped": (
                 {"cleaned_people.csv": cleaned(lambda t: t[t.ne("").all(axis=1)]),
                  "decision_log.csv": decisions(lambda t: t.assign(rows_after="4"))},
-                {"cleaned_people.csv: record_id": 3, **{f"cleaned_people.csv: {column}": 3
-                                                        for column in grading.CLEANED_COLUMNS[1:]}}, ("missing",)),
+                {"cleaned_people.csv: record_id": 3}, ("missing",)),
             "one audit count off by one": (
                 {"issue_audit.csv": edit_csv(files["issue_audit.csv"], lambda t: t.assign(
                     count=t["count"].mask(t["issue"].eq("age parse failures"), "2")))},
@@ -389,13 +433,28 @@ def run() -> None:
                 {"raw_preview.txt": None}, {"raw_preview.txt": 4}, ("missing",)),
             "raw_preview.txt without its head label": (
                 {"raw_preview.txt": files["raw_preview.txt"].replace("$ head -n 4 data/people_raw.csv\n", "")},
-                {"raw_preview.txt": 2}, ("head -n 4",)),
+                {"raw_preview.txt": 1}, ("head -n 4",)),
             "`raw_rows = 12` with spaces": (
                 {"pipeline_summary.txt": files["pipeline_summary.txt"].replace("raw_rows=", "raw_rows = ")},
                 {}, ()),
             "a wrong mean": (
                 {"numpy_age_summary.csv": files["numpy_age_summary.csv"].replace("mean,33.0", "mean,39.6")},
                 {"numpy_age_summary.csv": 1}, ("mean",)),
+            "R007's 40.5 rounded to 40 in the array": (
+                {"numpy_age_summary.csv": "metric,value\ncount,7\nmin,0\nmax,52\nsum,238\nmean,34.0\n"},
+                {"numpy_age_summary.csv": 1}, ("includes 40",)),
+            "the blanked ages kept as NaN, written with f-strings": (
+                {"numpy_age_summary.csv": "metric,value\n" + "".join(
+                    f"{metric},{value}\n" for metric, value in nan_age_summary().items())},
+                {"numpy_age_summary.csv": 1}, ("dropna", "nan")),
+            "the blanked ages kept as NaN, saved with to_csv": (
+                {"numpy_age_summary.csv": pd.DataFrame({"metric": list(nan_age_summary()),
+                                                        "value": list(nan_age_summary().values())})
+                 .to_csv(index=False)},
+                {"numpy_age_summary.csv": 1}, ("dropna",)),
+            "the metric names listed with no values": (
+                {"numpy_age_summary.csv": "metric,value\ncount,\nmin,\nmax,\nsum,\nmean,\n"},
+                {"numpy_age_summary.csv": 5}, ("count",)),
             "the whole raw table saved as the selection": (
                 {"pandas_selection.csv": pd.read_csv(DATA, dtype="string", keep_default_na=False)
                  .to_csv(index=False)},
@@ -437,7 +496,7 @@ def run() -> None:
             "a space after every comma, with R001's name left unstripped": (
                 {"cleaned_people.csv": files["cleaned_people.csv"].replace("Alice Smith", " Alice Smith ")
                  .replace(",", ", ")},
-                {"cleaned_people.csv: full_name": 1}, ("R001", "found 'Alice Smith '")),
+                {}, ()),
             "the age summary separated by semicolons with a decimal comma, the audit by tabs": (
                 {"numpy_age_summary.csv": files["numpy_age_summary.csv"].replace(",", ";").replace("33.0", "33,0"),
                  "issue_audit.csv": files["issue_audit.csv"].replace(",", "\t")},
@@ -448,6 +507,39 @@ def run() -> None:
             "a checksum computed from the wrong file": (
                 {"decision_log.csv": decisions(lambda t: t.assign(source_sha256="0" * 64))},
                 {"decision_log.csv: source_sha256": 1}, ("sha256",)),
+            "the selection taken from the cleaned table": (
+                {"pandas_selection.csv": edit_csv(files["pandas_selection.csv"], lambda t: t.assign(
+                    site=t["site"].str.strip().str.lower(), status=t["status"].str.strip().str.lower()))},
+                {}, ()),
+            "the audit and the age summary saved as Series without a name": (
+                {"issue_audit.csv": files["issue_audit.csv"].replace("issue,count", ",0"),
+                 "numpy_age_summary.csv": files["numpy_age_summary.csv"].replace("metric,value", ",0")},
+                {}, ()),
+            "cat output under the head label": (
+                {"raw_preview.txt": "\n".join(["$ head -n 4 data/people_raw.csv", *source_lines,
+                                               "$ tail -n 2 data/people_raw.csv", *source_lines[-2:]]) + "\n"},
+                {"raw_preview.txt": 2}, (f"found {len(source_lines)} lines", "prints 4")),
+            "plain head under the head label": (
+                {"raw_preview.txt": "\n".join(["$ head -n 4 data/people_raw.csv", *source_lines[:10],
+                                               "$ tail -n 2 data/people_raw.csv", *source_lines[-2:]]) + "\n"},
+                {"raw_preview.txt": 2}, ("found 10 lines", "prints 4")),
+            "pipeline_summary.txt written without newlines": (
+                {"pipeline_summary.txt": files["pipeline_summary.txt"].replace("\n", "")},
+                {}, ()),
+            "decision_log.csv not committed": (
+                {"decision_log.csv": None},
+                {name: points for name, points in (
+                    ("decision_log.csv: decisions", 8), ("decision_log.csv: reason", 2),
+                    ("decision_log.csv: source", 1), ("decision_log.csv: source_sha256", 1),
+                    ("decision_log.csv: rows_before", 1), ("decision_log.csv: rows_after", 1))},
+                ("missing", "Task 4.2")),
+            "dates written as UTC timestamps with Z and a fraction of a second": (
+                {"cleaned_people.csv": cleaned(lambda t: t.assign(visit_date=t["visit_date"].where(
+                    t["visit_date"].eq(""), t["visit_date"] + "T00:00:00.0Z")))},
+                {}, ()),
+            "dates written without dashes, 20260115": (
+                {"cleaned_people.csv": cleaned(lambda t: t.assign(visit_date=t["visit_date"].str.replace("-", "")))},
+                {}, ()),
         }
         for description, (changes, expected_losses, mentions) in mutations.items():
             root = write(work / re.sub(r"\W+", "-", description), files)

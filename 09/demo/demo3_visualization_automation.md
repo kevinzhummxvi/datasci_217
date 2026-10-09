@@ -15,72 +15,33 @@ jupyter:
     version: 3.13
 ---
 
-# Demo 3: Time Zones, Past-Only Patient Features, and Time-Series Plots
+# Demo 3: Past-Only Patient Features and Time-Series Plots
 
-A New York ICU exports charted heart rates on the local wall clock, and the export spans the night the clocks fell back. You convert clinic times to UTC, set aside the clock readings that happened twice, build lags and past-only means inside each patient's history, check which values were known at a prediction time, split the rows into a chronological holdout, and plot the panel and three years of emergency-department visits. Everything here comes from Lecture 09, plus Lectures 01 to 08. Patient values and visit counts are synthetic.
+A New York ICU exports charted heart rates on the local wall clock, and the export spans the night the clocks fell back.
 
-**How to run:** open this notebook in Colab from the lecture page's Colab link, or locally in VS Code with the kernel set to a `.venv` made by `uv venv --seed` and `uv pip install -r requirements.txt` in this folder (Lecture 03). Run the cells from top to bottom; after each step, an **Expect** line says what you should see. Colab does not save your changes back to GitHub; use **File → Save a copy in Drive** to keep them. Tested 2026-09-25 with Python 3.13, pandas 3.0.5, NumPy 2.3.3, matplotlib 3.11.1, and seaborn 0.13.2; the whole notebook runs in a few seconds.
+- Rebuild Demo 1's UTC panel of three patients, with each patient's ICU unit and oxygen saturation added.
+- Build lags and past-only means inside each patient's history.
+- Check which values were known at a prediction time, and split the rows chronologically.
+- Plot the panel and three years of emergency-department visits.
+- Patient values and visit counts are synthetic.
 
-## Setup
-
-The first cell installs pandas 3.0.5, the course version. Colab ships an older pandas (2.2). A `.venv` made with `uv venv --seed` includes pip, so the same `%pip` cell works locally too.
+Run the cells from top to bottom.
 
 ```python
-# Setup: install the course's pandas version (Colab and local)
-%pip install -q pandas==3.0.5
+# Installs the course's pandas in Colab (uv sync already did locally); if Colab asks, restart and rerun from the top
+%pip install -q --no-warn-conflicts pandas==3.0.5
 ```
-
-**Expect:** `Note: you may need to restart the kernel to use updated packages.` Locally, with the requirements already installed, the cell changes nothing and you can go on. In Colab, pip may also print a dependency conflict because some preinstalled packages expect pandas 2.2; that is expected, and this demo does not use them. If Colab asks you to restart the session (or says pandas was previously imported), choose **Runtime → Restart session**, then continue with the next cell. You do not need to rerun the install.
 
 ```python
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-
-print('pandas', pd.__version__)
-print('NumPy', np.__version__)
 ```
 
-**Expect:** `pandas 3.0.5` and `NumPy 2.3.3` (Colab may show a different NumPy; that is fine).
+## 1. Rebuild the ICU panel
 
-## 1. One instant on several clinic clocks
-
-A telehealth consult starts at 14:00 UTC. `tz_convert()` shows what each site's wall clock read at that instant. Zone names come from the IANA database, such as `'America/New_York'`.
-
-```python
-consult = pd.Timestamp('2024-03-15 14:00', tz='UTC')
-for zone in ['UTC', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Europe/London']:
-    print(f'{zone:<20} {consult.tz_convert(zone)}')
-```
-
-**Expect:** the same instant as `10:00-04:00` in New York, `09:00-05:00` in Chicago, `07:00-07:00` in Los Angeles, and `14:00+00:00` in London. The US had already switched to daylight saving time on March 10, and the UK had not yet (it switches on March 31).
-
-## 2. Two clinics' visit times, ordered in UTC
-
-A blood-pressure trial runs clinics in New York and Chicago. Each exports visit times as naive text on its own wall clock. Localize each site in the zone where it recorded, then convert both to UTC, and stack them with `pd.concat()` (Lecture 06).
-
-```python
-new_york = pd.DataFrame({'site': 'New York', 'patient_id': ['NY-01', 'NY-02'],
-                         'visit_local': ['2024-03-15 09:00', '2024-03-15 10:30'], 'sbp': [142, 128]})
-chicago = pd.DataFrame({'site': 'Chicago', 'patient_id': ['CH-01', 'CH-02'],
-                        'visit_local': ['2024-03-15 08:30', '2024-03-15 09:00'], 'sbp': [135, 150]})
-
-new_york['visit_utc'] = (pd.to_datetime(new_york['visit_local'], format='%Y-%m-%d %H:%M')
-                         .dt.tz_localize('America/New_York').dt.tz_convert('UTC'))
-chicago['visit_utc'] = (pd.to_datetime(chicago['visit_local'], format='%Y-%m-%d %H:%M')
-                        .dt.tz_localize('America/Chicago').dt.tz_convert('UTC'))
-visits = pd.concat([new_york, chicago], ignore_index=True)
-
-print(visits.sort_values('visit_local'))
-print(visits.sort_values('visit_utc'))
-```
-
-**Expect:** sorted by the local text, Chicago's 08:30 visit comes first. Sorted by `visit_utc`, New York's 09:00 visit (`13:00+00:00`) comes first and Chicago's 08:30 (`13:30+00:00`) second: 08:30 in Chicago happened half an hour after 09:00 in New York.
-
-## 3. The night the clocks fell back
-
-The New York ICU's export covers the night of November 2 to 3, 2024, for three patients. At 02:00 that night, clocks went back to 01:00, so every local time from 01:00 to 01:59 happened twice. One of P02's readings was charted at 01:30, and the export does not say which 01:30 it was.
+Demo 1, section 7 built this table with two extra columns here, `unit` and `spo2` (oxygen saturation, %): three patients' heart rates from the night of November 2 to 3, 2024, localized in New York, with the one ambiguous 01:30 reading set aside, then converted to UTC.
 
 ```python
 raw = pd.DataFrame({
@@ -91,49 +52,22 @@ raw = pd.DataFrame({
         '2024-11-02 23:00', '2024-11-03 00:15', '2024-11-03 02:15', '2024-11-03 04:00',
     ],
     'heart_rate': [88, 94, 101, 112, 118, 72, 70, 68, 71, 69, 104, 99, 95, 92],
+    'spo2': [97, 96, 95, 93, 91, 98, 98, 97, 98, 98, 92, 93, 95, 96],
 })
-print(raw.shape)
-```
-
-**Expect:** `(14, 3)`. P01's heart rate climbs from 88 to 118 bpm (deteriorating), P02 stays near 70, and P03 falls from 104 to 92 (recovering).
-
-Localize with `ambiguous='NaT'` and `nonexistent='NaT'`, so pandas marks the uncertain reading instead of guessing, and report how many were set aside before dropping them.
-
-```python
+raw['unit'] = raw['patient_id'].map({'P01': 'ICU-A', 'P02': 'ICU-B', 'P03': 'ICU-A'})
 local = pd.to_datetime(raw['recorded_local'], format='%Y-%m-%d %H:%M')
-aware = local.dt.tz_localize('America/New_York', ambiguous='NaT', nonexistent='NaT')
-print('Set aside:', aware.isna().sum())
-print(raw[aware.isna()])
-
-raw['recorded_at'] = aware.dt.tz_convert('UTC')
-vitals = (raw.dropna(subset=['recorded_at'])[['patient_id', 'recorded_at', 'heart_rate']]
+raw['recorded_at'] = (local.dt.tz_localize('America/New_York', ambiguous='NaT', nonexistent='NaT')
+                      .dt.tz_convert('UTC'))
+vitals = (raw.dropna(subset=['recorded_at'])[['patient_id', 'unit', 'recorded_at', 'heart_rate', 'spo2']]
           .sort_values(['patient_id', 'recorded_at'])
           .reset_index(drop=True))
-print(vitals)
+display(vitals)
 ```
 
-**Expect:** `Set aside: 1`, the P02 row at `2024-11-03 01:30`. `vitals` has 13 rows, sorted by patient and then time, all in UTC. P01's local 00:30 and 03:00 look 2.5 hours apart, but in UTC they are `04:30` and `08:00`: 3.5 hours passed, because the 01:00 hour happened twice.
+**Expect:** 13 rows and 5 columns, sorted by patient and then time, all in UTC. P01 (`ICU-A`) heart rate climbs from 88 to 118 bpm while `spo2` slips from 97 to 91 (deteriorating), P02 (`ICU-B`) stays near 70 bpm and 98%, and P03 (`ICU-A`) falls from 104 to 92 bpm while `spo2` recovers from 92 to 96 (recovering).
 
-## 4. Check both clock-change days
 
-A monitor that records every hour produces 24 readings on an ordinary day. On clock-change days, count the elapsed hours in the local day instead of assuming 24.
-
-```python
-for day in ['2024-03-10', '2024-11-03', '2024-11-04']:
-    hours = pd.date_range(day, pd.Timestamp(day) + pd.Timedelta(days=1), freq='h',
-                          tz='America/New_York', inclusive='left')
-    print(day, len(hours), 'hours')
-
-# A dose charted at 02:30 on the spring-forward night names a time that never happened
-charted = pd.Series(pd.to_datetime(['2024-03-10 01:30', '2024-03-10 02:30', '2024-03-10 03:30']))
-spring = charted.dt.tz_localize('America/New_York', ambiguous='NaT', nonexistent='NaT')
-print(spring)
-print('Set aside:', spring.isna().sum())
-```
-
-**Expect:** `2024-03-10 23 hours`, `2024-11-03 25 hours`, and `2024-11-04 24 hours`. The 02:30 dose becomes `NaT` (`Set aside: 1`); the 01:30 and 03:30 doses keep offsets of `-05:00` and `-04:00`, one hour of elapsed time apart.
-
-## 5. Previous readings within each patient
+## 2. Previous readings within each patient
 
 The table stacks three patients. A plain `shift(1)` runs straight down the stacked column; a grouped shift stays inside each patient's history.
 
@@ -141,7 +75,7 @@ The table stacks three patients. A plain `shift(1)` runs straight down the stack
 vitals['wrong_previous'] = vitals['heart_rate'].shift(1)
 by_patient = vitals.groupby('patient_id')['heart_rate']
 vitals['previous_hr'] = by_patient.shift(1)
-print(vitals[['patient_id', 'heart_rate', 'wrong_previous', 'previous_hr']])
+display(vitals[['patient_id', 'heart_rate', 'wrong_previous', 'previous_hr']])
 ```
 
 **Expect:** the two columns agree except on each patient's first row. Row 5, P02's first reading, has `wrong_previous` `118.0`, P01's last heart rate, and row 9, P03's first, has `69.0` from P02. `previous_hr` is `NaN` on all three first rows.
@@ -149,12 +83,13 @@ print(vitals[['patient_id', 'heart_rate', 'wrong_previous', 'previous_hr']])
 ```python
 vitals = vitals.drop(columns='wrong_previous')
 vitals['hr_change'] = by_patient.diff()
-print(vitals[['patient_id', 'heart_rate', 'previous_hr', 'hr_change']])
+display(vitals[['patient_id', 'heart_rate', 'previous_hr', 'hr_change']])
 ```
 
 **Expect:** P01's changes are all positive (`6.0`, `7.0`, `11.0`, `6.0`); P03's are all negative (`-5.0`, `-4.0`, `-3.0`).
 
-## 6. Past-only means
+
+## 3. Past-only means
 
 Two summaries of the recent past, both excluding the current reading: the mean of the previous two readings, however far apart, and the mean over the previous two hours of elapsed time.
 
@@ -172,12 +107,13 @@ prev_2h = (
 )
 vitals = vitals.merge(prev_2h, on=['patient_id', 'recorded_at'], validate='one_to_one')
 print(vitals.shape)
-print(vitals[['patient_id', 'recorded_at', 'heart_rate', 'mean_prev_2', 'mean_prev_2h']])
+display(vitals[['patient_id', 'recorded_at', 'heart_rate', 'mean_prev_2', 'mean_prev_2h']])
 ```
 
-**Expect:** `(13, 7)`: the merge kept one row per reading. At P01's `08:00` reading, `mean_prev_2` is `97.5` (the 94 and 101 readings) but `mean_prev_2h` is `NaN`, because nothing was recorded in the two hours before 08:00 UTC. At P03's `09:00` reading, the two-hour mean is `95.0`, only the 07:15 reading.
+**Expect:** `(13, 9)`: the merge kept one row per reading. At P01's `08:00` reading, `mean_prev_2` is `97.5` (the 94 and 101 readings) but `mean_prev_2h` is `NaN`, because nothing was recorded in the two hours before 08:00 UTC. At P03's `09:00` reading, the two-hour mean is `95.0`, only the 07:15 reading.
 
-## 7. What was known at the prediction time?
+
+## 4. What was known at the prediction time?
 
 An early-warning score runs at 08:00 UTC (03:00 in New York). Lab results count only if they had been reported by then, whenever the sample was drawn. `pd.to_datetime(..., utc=True)` reads times the lab system already stores in UTC.
 
@@ -192,7 +128,7 @@ labs = pd.DataFrame({
                                    '2024-11-03 08:20', '2024-11-03 07:45'], utc=True),
 })
 labs['available'] = labs['resulted_at'] <= prediction_time
-print(labs[['patient_id', 'test', 'resulted_at', 'available']])
+display(labs[['patient_id', 'test', 'resulted_at', 'available']])
 ```
 
 **Expect:** lactate and troponin are `True`; the blood culture (resulted the next day) and the creatinine (drawn at 07:30, resulted at 08:20) are `False`, even though both were collected before 08:00.
@@ -208,24 +144,26 @@ audit = pd.DataFrame({
 })
 audit['available'] = audit['latest_timestamp'] <= prediction_time
 audit['decision'] = np.where(audit['available'], 'keep', 'reject')
-print(audit)
+display(audit)
 ```
 
 **Expect:** the first three candidates are `True` and `keep`; `next heart rate` and `centered 3-reading mean` are `False` and `reject`.
 
-## 8. A chronological holdout
+
+## 5. A chronological holdout
 
 To test a score honestly, build it on the earlier rows and hold out the rows from the prediction time onward, the way it would meet later patients.
 
 ```python
 vitals['block'] = np.where(vitals['recorded_at'] < prediction_time, 'earlier', 'later_holdout')
-print(vitals[['patient_id', 'recorded_at', 'block']])
-print(pd.crosstab(vitals['patient_id'], vitals['block']))
+display(vitals[['patient_id', 'recorded_at', 'block']])
+display(pd.crosstab(vitals['patient_id'], vitals['block']))
 ```
 
 **Expect:** 9 `earlier` rows and 4 `later_holdout` rows: 3 and 2 for P01 (its 08:00 reading is held out, because `<` keeps the cutoff itself out of `earlier`), 3 and 1 for P02, and 3 and 1 for P03.
 
-## 9. Plot the panel in UTC
+
+## 6. Plot the panel in UTC
 
 One line per patient with seaborn's `hue=` (Lecture 07), a dashed reference line at 100 bpm, the usual threshold for tachycardia (a fast heart rate), and the time zone in the axis label.
 
@@ -242,14 +180,15 @@ plt.show()
 
 **Expect:** P01's line climbs across the dashed line between 03:30 and 04:30 UTC and keeps rising to 118; P03's starts above it and falls below; P02's stays near 70. There is no P02 point between 04:00 and 07:00 UTC, where the ambiguous reading was set aside.
 
-## 10. Three years of flu-like illness visits
+
+## 7. Three years of flu-like illness visits
 
 The emergency department counts visits for influenza-like illness (fever with cough or sore throat) every day. Visits peak each winter. The reporting feed failed for two weeks in February 2023, so those days have no rows at all.
 
 ```python
 rng = np.random.default_rng(42)
 days = pd.date_range('2021-01-01', '2023-12-31', freq='D')
-# np.cos, like the lecture's np.sin, makes a yearly wave; this one peaks in mid-January
+# Practice data only: np.cos makes a wave that repeats every 365.25 days and peaks on day 15 (mid-January)
 winter_wave = 20 * np.cos(2 * np.pi * (days.dayofyear - 15) / 365.25)
 noise = rng.normal(0, 4, len(days))  # mean 0, standard deviation 4 visits
 ili = pd.Series((40 + winter_wave + noise).round().astype(int), index=days)
@@ -257,11 +196,18 @@ ili = pd.Series((40 + winter_wave + noise).round().astype(int), index=days)
 outage = pd.date_range('2023-02-01', '2023-02-14', freq='D')
 ili = ili[~ili.index.isin(outage)]
 print(len(ili), 'days reported')
-print('Frequency:', pd.infer_freq(ili.index))
-print(ili.resample('W').count().loc['2023-01-29':'2023-02-19'])
+display(ili.resample('W').count().loc['2023-01-29':'2023-02-19'])
 ```
 
-**Expect:** `1081 days reported` (1,095 days minus the 14-day outage), and `Frequency: None`, because the missing days break the daily spacing. The weekly counts of reported days drop to `2`, `0`, and `5` for the weeks ending February 5, 12, and 19. A weekly _sum_ of visits would fall the same way, which is a reporting gap, not fewer patients.
+**Expect:** `1081 days reported` (1,095 days minus the 14-day outage). The weekly counts of reported days drop to `2`, `0`, and `5` for the weeks ending February 5, 12, and 19. A weekly _sum_ of visits would fall the same way, which is a reporting gap, not fewer patients.
+
+Optional extension. Prerequisite: BONUS.md, Frequency Inference and Specialized Schedules. `pd.infer_freq()` reads the spacing back from the index.
+
+```python
+print('Frequency:', pd.infer_freq(ili.index))
+```
+
+**Expect:** `Frequency: None`, because the missing days break the daily spacing.
 
 Plotted as is, the line draws straight across the outage. `asfreq('D')` puts the missing days back as `NaN`, and the line breaks there instead.
 
@@ -297,7 +243,7 @@ Averaging by calendar month shows the seasonal pattern directly. Bars go on a ne
 
 ```python
 monthly_mean = ili.groupby(ili.index.month).mean()
-print(monthly_mean.round(1))
+display(monthly_mean.round(1))
 
 fig, ax = plt.subplots(figsize=(8, 4))
 monthly_mean.plot(kind='bar', ax=ax, rot=0, color='steelblue',
@@ -308,3 +254,77 @@ plt.show()
 ```
 
 **Expect:** January is highest (`60.2`) and July lowest (`20.6`); the bars fall from January to July and rise again toward December (`56.8`).
+
+
+## 8. Daily weights: lags, leads, and a fluid-gain alert
+
+Heart-failure patients are commonly told to call the clinic if their weight rises by more than about 1 kg in a day or 2 kg in a week, because fluid is building up. This section builds one patient's daily weight for January through March, with a fluid-gain episode in March.
+
+- The lag, lead, difference, and alert use the main lecture.
+- `rng` makes the same "random" values on every run (Lecture 03), so your numbers match the ones below.
+
+```python
+rng = np.random.default_rng(42)
+days = pd.date_range('2024-01-01', '2024-03-31', freq='D')
+scale_noise = rng.normal(0, 0.15, len(days))  # mean 0, standard deviation 0.15 kg
+weights = pd.Series(82 + scale_noise, index=days)
+
+# Fluid builds up from March 9, then a diuretic brings it back down
+weights.loc['2024-03-09':'2024-03-15'] += [0.5, 1.9, 2.6, 2.6, 1.9, 1.1, 0.4]
+
+daily = pd.DataFrame({'weight_kg': weights.round(1)})
+print(daily.shape)
+```
+
+**Expect:** `(91, 1)` (31 + 29 + 31 days).
+
+`shift(1)` brings each row the previous day's value (a lag), `shift(-1)` the next day's (a lead), and `diff()` subtracts the lag. Because the rows are consecutive days, `shift(7)` is the weight one week earlier.
+
+```python
+daily['prev_day'] = daily['weight_kg'].shift(1)
+daily['next_day'] = daily['weight_kg'].shift(-1)
+daily['change_1d'] = daily['weight_kg'].diff()
+daily['change_7d'] = daily['weight_kg'] - daily['weight_kg'].shift(7)
+display(daily.head(3).round(2))
+display(daily.loc['2024-03-08':'2024-03-13'].round(2))
+```
+
+**Expect:** on January 1, `prev_day` and `change_1d` are `NaN` (nothing came before), and `change_7d` stays `NaN` through January 7. In March, the weight climbs from 81.9 kg on March 8 to 83.9 kg on March 10 (`change_1d` 1.3) and 84.4 kg on March 11 and 12 (`change_7d` 2.3).
+
+Optional extension. Prerequisites: BONUS.md, Frequency Inference and Specialized Schedules, and BONUS.md, Percentage Changes. This cell adds no column that later cells need.
+
+```python
+print('Frequency:', pd.infer_freq(daily.index))
+pct_1d = daily['weight_kg'].pct_change() * 100
+display(pct_1d.loc['2024-03-08':'2024-03-13'].round(2))
+```
+
+**Expect:** `Frequency: D`. The percent change is `0.85` on March 9 and peaks at `1.57` on March 10, the 1.3 kg jump.
+
+Apply both alert rules with a boolean filter (Lecture 04).
+
+```python
+alerts = daily[(daily['change_1d'] > 1.0) | (daily['change_7d'] > 2.0)]
+display(alerts[['weight_kg', 'change_1d', 'change_7d']].round(1))
+print('Largest daily change before March 9:', daily.loc[:'2024-03-08', 'change_1d'].abs().max().round(1), 'kg')
+```
+
+**Expect:** three alert days: March 10 (the 1-day rule, `1.3` kg) and March 11 and 12 (the 7-day rule, `2.3` kg). Before the episode, no day moved more than `0.4` kg, so ordinary scale noise never trips the rule.
+
+
+## 9. Plot the home-weight alerts
+
+Use `daily` and `alerts` from section 8. Marking the alert days on the raw series shows both the size of the change and when it happened.
+
+```python
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.plot(daily.index, daily['weight_kg'], color='gray', label='Daily weight')
+ax.plot(alerts.index, alerts['weight_kg'], 'o', color='red', label='Alert day')  # markers only, no line
+ax.set(title='Home weights with fluid-gain alerts', xlabel='Date', ylabel='Weight (kg)')
+ax.legend()
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+**Expect:** a flat gray line near 82 kg with a sharp hump in mid-March, and three red points at the top of the hump (March 10 to 12).

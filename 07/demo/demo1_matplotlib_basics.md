@@ -17,46 +17,33 @@ jupyter:
 
 # Demo 1: Contract first, then matplotlib
 
-A clinic network hands you two prepared plotting tables: one row per blood-pressure reading, and one row per week of flu visits. You write the visualization contract first, let it pick the chart, then draw exploratory and explanatory charts with `fig, ax = plt.subplots()` and Axes methods. Everything here comes from Lecture 07 up to the first demo break, plus Lectures 01 to 06. The patient IDs and values are synthetic.
+Two prepared clinic tables (readings and weekly flu visits), then charts drawn with `fig, ax = plt.subplots()` and Axes methods. The patient IDs and values are synthetic.
 
-**How to run:** open this notebook in Colab from the lecture page's Colab link, or locally in VS Code with the kernel set to a `.venv` made by `uv venv --seed` and `uv pip install -r requirements.txt` in this folder (Lecture 03). Run the cells from top to bottom; after each step, an **Expect** line says what you should see. Colab does not save your changes back to GitHub; use **File → Save a copy in Drive** to keep them. Tested 2026-09-24 with Python 3.13, pandas 3.0.5, NumPy 2.3.3, and matplotlib 3.11.1; the whole notebook runs in a few seconds.
-
-## Setup
-
-Run this cell first. It installs pandas 3.0.5, the course version, into the notebook's environment: in Colab, which ships an older pandas, and in your local `.venv` alike.
-
-- pip may print a warning that other Colab packages expect a different pandas. That is expected; this demo does not use those packages.
-- If Colab asks you to restart after the install, choose **Runtime → Restart session**, then run the notebook from the top.
-- Locally, the `.venv` you made with `uv venv --seed` includes pip, so `%pip` installs into it too. When pandas 3.0.5 is already there, the cell only prints `Note: you may need to restart the kernel to use updated packages.`; nothing needs doing.
+Run the cells from top to bottom.
 
 ```python
-# Setup: install the course's pandas version (Colab and local)
-%pip install -q pandas==3.0.5
+# Installs the course's pandas in Colab (uv sync already did locally); if Colab asks, restart and rerun from the top
+%pip install -q --no-warn-conflicts pandas==3.0.5
 ```
 
-```python
-from pathlib import Path
+## Core walkthrough
 
-import matplotlib
+### 1. Meet the plotting tables
+
+The first table has one row per systolic blood-pressure reading: 20 patients at each of two clinics.
+
+- `rng` makes the same "random" values on every run (Lecture 03), so your numbers match the ones below.
+- Each reading rises with age, runs 6 mmHg higher at South, and varies by `rng.standard_normal(40) * 8`: 40 bell-curve values spread around 0 by about 8 mmHg.
+
+```python
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from IPython.display import Markdown
 
-print("pandas:", pd.__version__)
-print("NumPy:", np.__version__)
-print("matplotlib:", matplotlib.__version__)
-```
-
-Expect `pandas: 3.0.5`. If Colab shows an older pandas, it was imported before the install finished: restart the session and run all cells again.
-
-## 1. Meet the plotting tables
-
-The first table has one row per systolic blood-pressure reading: 20 patients at the North clinic and 20 at the South clinic. `rng` makes the same "random" values on every run (Lecture 03), so your numbers match the ones below.
-
-```python
 rng = np.random.default_rng(42)
 ages = rng.integers(30, 80, size=40)             # 30 through 79 years
-noise = rng.normal(0, 8, size=40)                # reading-to-reading variation, mmHg
+noise = rng.standard_normal(40) * 8              # reading-to-reading variation, mmHg
 clinic = np.array(['North'] * 20 + ['South'] * 20)
 systolic = 95 + 0.6 * ages + np.where(clinic == 'South', 6, 0) + noise
 
@@ -67,11 +54,11 @@ readings = pd.DataFrame({
     'systolic_bp': systolic.round().astype(int),
 })
 print(readings.shape)
-print(readings.head())
-print(readings.dtypes)
+display(readings.head())
+display(readings.dtypes)
 ```
 
-Expect `(40, 4)`, five rows starting with patient `1001`, and three `int64` columns plus `clinic` as `str`.
+Expect `(40, 4)`, five rows starting with patient `1001` (North, age 34, 114 mmHg), and three `int64` columns plus `clinic` as `str`.
 
 The second table is already one row per week: flu visits at each clinic over a ten-week season.
 
@@ -81,12 +68,39 @@ weekly = pd.DataFrame({
     'North': [12, 15, 21, 30, 42, 51, 47, 36, 24, 17],
     'South': [10, 11, 14, 18, 23, 29, 34, 33, 27, 20],
 })
-print(weekly)
+display(weekly)
 ```
 
 Expect ten rows. North peaks at 51 visits in week 6; South peaks at 34 in week 7.
 
-## 2. Write the contract before plotting
+### 2. Customize: units, a legend, and a redundant cue
+
+- **Question**: does BP vary with age and clinic?
+- **Marks**: one point is one reading; age and BP are quantitative, clinic is nominal.
+- **Claim**: descriptive only; these synthetic rows support no causal claim.
+- **Encoding**: each clinic is its own series with a color **and** a marker shape, so the groups stay distinct in grayscale.
+
+```python
+north = readings.loc[readings['clinic'] == 'North']
+south = readings.loc[readings['clinic'] == 'South']
+
+fig, ax = plt.subplots(figsize=(7, 5))
+ax.scatter(north['age'], north['systolic_bp'], color='#0072B2', marker='o', alpha=0.7, label='North')
+ax.scatter(south['age'], south['systolic_bp'], color='#D55E00', marker='s', alpha=0.7, label='South')
+ax.set(title='Systolic BP by age at two clinics', xlabel='Age (years)', ylabel='Systolic BP (mmHg)')
+ax.grid(alpha=0.3)
+ax.legend(title='Clinic', loc='lower right')
+plt.show()
+print(len(north), 'North points and', len(south), 'South points')
+```
+
+Expect blue circles and orange squares that both rise with age, a legend titled Clinic in the empty lower-right corner, and `20 North points and 20 South points`. At similar ages the orange squares tend to sit higher.
+
+## Independent practice
+
+Continue on your own after class. These cells reuse the core results; if the runtime closed, run the cells above again first.
+
+### 1. Write the contract before plotting
 
 Three `int64` columns do not mean three measures. The contract records what each column means and which job it does, and that is what picks the chart.
 
@@ -94,15 +108,15 @@ Three `int64` columns do not mean three measures. The contract records what each
 contract = {
     'question': 'How do systolic readings compare between the North and South clinics?',
     'audience_and_claim': 'Clinic managers; a descriptive comparison of levels and spread, not a cause',
-    'unit_and_grain': 'One row and one mark per systolic reading at one visit',
+    'unit_and_grain': 'One source row per systolic reading at one visit; one histogram bar per pressure bin, '
+                      'and one box summarizing the readings at each clinic',
     'variables': 'systolic_bp: quantitative measure (y); clinic: categorical group (x); '
                  'age: quantitative, not used here; patient_id: identifier, never averaged or plotted',
 }
-for part, answer in contract.items():
-    print(f'{part}: {answer}')
+display(Markdown('\n'.join(f'- **{part}**: {answer}' for part, answer in contract.items())))
 ```
 
-Expect four lines, one per part of the contract.
+Expect a four-item list, one per part of the contract.
 
 The question compares a distribution across two groups, so the chart-selection figure in the lecture points to a **box plot** (one box per clinic), with a **histogram** to check the overall shape first. The other questions in this demo pick other charts:
 
@@ -114,19 +128,18 @@ The question compares a distribution across two groups, so the chart-selection f
 | How many flu visits did each clinic have in total? | Quantitative by categorical, one value each | Bar chart from zero |
 | How did weekly flu visits change? | Quantitative over temporal | Line chart |
 
-## 3. An exploratory look: one Figure, four Axes
+### 2. An exploratory look: one Figure, four Axes
 
 `plt.subplots(2, 2)` returns one Figure and a 2-D array of Axes, so `axes[0, 1]` is row 0, column 1. The two clinics' readings come from boolean selection with `.loc` (Lecture 04).
 
 ```python
 north_bp = readings.loc[readings['clinic'] == 'North', 'systolic_bp']
 south_bp = readings.loc[readings['clinic'] == 'South', 'systolic_bp']
-print('North median:', north_bp.median(), 'mmHg')
-print('South median:', south_bp.median(), 'mmHg')
-print('Total flu visits:', weekly['North'].sum(), 'North,', weekly['South'].sum(), 'South')
+display(pd.DataFrame({'count': [north_bp.count(), south_bp.count()], 'median': [north_bp.median(), south_bp.median()]}, index=['North', 'South']))
+display(weekly[['North', 'South']].sum())
 ```
 
-Expect `North median: 130.5 mmHg`, `South median: 139.0 mmHg`, and totals of 295 (North) and 219 (South).
+Expect medians of 130.5 mmHg (North) and 139.0 mmHg (South) over 20 readings each, and flu-visit totals of 295 (North) and 219 (South).
 
 ```python
 fig, axes = plt.subplots(2, 2, figsize=(10, 8))
@@ -153,27 +166,7 @@ Expect `<class 'matplotlib.figure.Figure'>`, `(2, 2)`, and four panels. The hist
 
 This is exploratory work: quick, but with honest scales and units on every axis.
 
-## 4. Customize: units, a legend, and a redundant cue
-
-The scatter above cannot tell the clinics apart. Draw each clinic as its own series, giving each a color **and** a marker shape, so the groups stay distinct in grayscale.
-
-```python
-north = readings.loc[readings['clinic'] == 'North']
-south = readings.loc[readings['clinic'] == 'South']
-
-fig, ax = plt.subplots(figsize=(7, 5))
-ax.scatter(north['age'], north['systolic_bp'], color='#0072B2', marker='o', alpha=0.7, label='North')
-ax.scatter(south['age'], south['systolic_bp'], color='#D55E00', marker='s', alpha=0.7, label='South')
-ax.set(title='Systolic BP by age at two clinics', xlabel='Age (years)', ylabel='Systolic BP (mmHg)')
-ax.grid(alpha=0.3)
-ax.legend(title='Clinic', loc='lower right')
-plt.show()
-print(len(north), 'North points and', len(south), 'South points')
-```
-
-Expect blue circles and orange squares that both rise with age, a legend titled Clinic in the empty lower-right corner, and `20 North points and 20 South points`. At similar ages the orange squares tend to sit higher.
-
-## 5. An explanatory chart: annotate, declutter, and save
+### 3. An explanatory chart: annotate, declutter, and save
 
 Now one finding for one audience. Write its contract, then build the chart it asks for.
 
@@ -184,11 +177,10 @@ flu_contract = {
     'unit_and_grain': 'One point per clinic per week',
     'variables': 'week: temporal order (x); North and South: quantitative visit counts (y), one line each',
 }
-for part, answer in flu_contract.items():
-    print(f'{part}: {answer}')
+display(Markdown('\n'.join(f'- **{part}**: {answer}' for part, answer in flu_contract.items())))
 ```
 
-Expect four lines, one per part of the contract.
+Expect a four-item list, one per part of the contract.
 
 The line chart pairs each color with its own marker and line style, points an arrow at North's peak, hides the two frame lines that carry no data, and puts the legend outside the plotting area.
 
@@ -206,6 +198,9 @@ ax.legend(title='Clinic', loc='upper left', bbox_to_anchor=(1, 1), frameon=False
 
 fig.savefig('weekly_flu_visits.png', dpi=150, bbox_inches='tight')
 plt.show()
+
+from pathlib import Path
+
 print(Path('weekly_flu_visits.png').exists())
 ```
 

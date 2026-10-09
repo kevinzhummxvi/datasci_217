@@ -123,9 +123,50 @@ def run() -> None:
             ),
             # A patient listed twice counts once.
             followup + f"{listed[0]}\n",
+            # IDs written together on one line, by print(ids) or joined with commas.
+            f"Cutoff: {cutoff} mmHg\n{REASON}{listed}\n",
+            f"Cutoff: {cutoff} mmHg\n{REASON}" + ", ".join(listed) + "\n",
+            # A printed set, as print(ids) writes one.
+            f"Cutoff: {cutoff} mmHg\n{REASON}{set(listed)}\n",
         ):
             write_submission(root, report=report, followup=variant)
             assert grade_submission(root)["score"] == 100, variant
+
+        # A cutoff that selects one patient, printed as a one-ID list or set, is read as that patient.
+        only = sorted(encounters.patients_at_or_above(175))
+        assert len(only) == 1, only
+        for printed in (str(only), str(set(only))):
+            write_submission(root, report=report, followup=f"Cutoff: 175 mmHg\n{REASON}{printed}\n")
+            assert grade_submission(root)["score"] == 100, printed
+        # A line with an ID among other words is not read, and the feedback shows the line it found.
+        write_submission(root, report=report, followup=f"Cutoff: 175 mmHg\n{REASON}call {only[0]} today\n")
+        detail = [t["detail"] for t in grade_submission(root)["tests"] if t["test-name"] == "follow-up patient list"][0]
+        assert f"found `call {only[0]} today`" in detail and "the 1 patient with" in detail, detail
+        # One line read and another not: the unread ID is shown on its line, not called left out.
+        pair = sorted(encounters.patients_at_or_above(165))
+        assert len(pair) == 2, pair
+        write_submission(root, report=report, followup=f"Cutoff: 165 mmHg\n{REASON}{pair[0]}\n{pair[1]} (186 mmHg)\n")
+        detail = [t["detail"] for t in grade_submission(root)["tests"] if t["test-name"] == "follow-up patient list"][0]
+        assert f"found `{pair[1]} (186 mmHg)`" in detail and "leaves out" not in detail, detail
+
+        # Leaving out the 60-250 mmHg range rule is one mistake, charged once in the usable count: the
+        # skipped count, later values, and list are judged against the student's own rows.
+        loose = summarize_encounters(SUPPLIED_ENCOUNTERS, check_range=False)
+        assert (len(loose.usable), loose.skipped_rows) == (27, 4), loose
+        loose_readings = loose.readings
+        write_submission(
+            root,
+            report=(
+                f"Usable encounters: {len(loose.usable)}\nSkipped rows: {loose.skipped_rows}\n"
+                f"Patients seen: {len(loose.patients)}\n"
+                f"Mean systolic: {sum(loose_readings) / len(loose_readings):.1f}\n"
+                f"Highest systolic: {max(loose_readings)}\nLowest systolic: {min(loose_readings)}\n"
+            ),
+            followup=f"Cutoff: {cutoff} mmHg\n{REASON}" + "".join(f"{p}\n" for p in sorted(loose.patients_at_or_above(cutoff))),
+        )
+        lost = {name: CHECK_POINTS[name] - score for name, score in scores(root).items() if score != CHECK_POINTS[name]}
+        assert set(lost) == {"usable encounters"}, lost
+        assert "range rule is likely missing" in str(grade_submission(root)), grade_submission(root)
 
         # Every cutoff in range is right when the list matches it.
         for alternative in range(120, 181):
@@ -136,6 +177,13 @@ def run() -> None:
                 followup=f"Cutoff: {alternative}\n{REASON}" + "".join(f"{p}\n" for p in listed_alternative),
             )
             assert grade_submission(root)["score"] == 100, alternative
+
+        # A readable out-of-range cutoff still defines its downstream patient list.
+        for alternative in (95, 190):
+            write_submission(root, report=report, followup=f"Cutoff: {alternative}\n{REASON}"
+                             + "".join(f"{patient}\n" for patient in sorted(encounters.patients_at_or_above(alternative))))
+            assert grade_submission(root)["score"] == 95
+            assert scores(root)["follow-up patient list"] == 15
 
         # A cutoff outside the range, or a list from another cutoff, loses only its own check.
         write_submission(root, report=report, followup=f"Cutoff: 95\n{REASON}" + "".join(f"{p}\n" for p in listed))
@@ -170,7 +218,7 @@ def run() -> None:
             assert result["vitals report format"] == 10, (label, result)
             assert sum(result.values()) == 100 - CHECK_POINTS[check], (label, result)
 
-        # A missing label costs the format check and that value's check only.
+        # A missing label costs only its value check.
         write_submission(
             root,
             report="\n".join(line for line in report.splitlines() if not line.startswith("Patients seen")) + "\n",
@@ -180,7 +228,7 @@ def run() -> None:
             "README project description": 5,
             "README run command": 5,
             ".gitignore bytecode cache": 5,
-            "vitals report format": 0,
+            "vitals report format": 10,
             "usable encounters": 8,
             "skipped rows": 7,
             "patients seen": 0,
@@ -291,7 +339,7 @@ def run() -> None:
         # The printed report says each shared fix once, says what a wrong value should be, and ends by
         # naming the checks left to fix, grouped by file.
         def printed(checks: Path) -> str:
-            return subprocess.run([sys.executable, "-B", str(checks / "check_assignment.py"), str(root)],
+            return subprocess.run([sys.executable, "-B", str(checks / "check_assignment.py"), str(root), "--local-checks"],
                                   capture_output=True, text=True, check=False).stdout
 
         write_submission(root, report=report.replace(f"{mean:.1f}", f"{mean + 4:.1f}"), followup=followup)
@@ -301,7 +349,7 @@ def run() -> None:
         write_submission(root, report=report.replace("Usable encounters:", "Usable rows:"), followup=followup)
         shown = printed(CHECKS)
         assert f"the closest line reads `Usable rows: {len(encounters.usable)}`" in shown, shown
-        assert shown.endswith("Left to fix (18 points): output/vitals_report.txt: format and usable encounters.\n"), shown
+        assert shown.endswith("Left to fix (8 points): output/vitals_report.txt: usable encounters.\n"), shown
         write_submission(root, report=report, followup=followup)
         (root / "output" / "followup_list.txt").unlink()
         shown = printed(CHECKS)
@@ -345,17 +393,17 @@ def run_handout_copy() -> None:
         "vitals_tools.py",
     }, sorted(handout_python)
 
-    # A fresh handout prints exactly the "Before Task 1" example README.md shows, and ends by naming every file.
-    readme = (ASSIGNMENT / "README.md").read_text(encoding="utf-8")
+    # A fresh handout prints exactly the "Before Task 1" example CHECKS.md shows, and ends by naming every file.
+    readme = (ASSIGNMENT / "CHECKS.md").read_text(encoding="utf-8")
     shown = re.search(r"Before Task 1, for example, the first check reports:\n\n```text\n(.*?)```", readme, re.DOTALL)
-    assert shown is not None, "README.md no longer shows the Before Task 1 example"
+    assert shown is not None, "CHECKS.md no longer shows the Before Task 1 example"
     with tempfile.TemporaryDirectory(dir=REPO / "scratch", prefix="a02-handout-") as temporary:
         fresh = Path(temporary) / "fresh"
         shutil.copytree(ASSIGNMENT, fresh, ignore=shutil.ignore_patterns("__pycache__"))
         for artifact in (fresh / "output").iterdir():
             if artifact.name != ".gitkeep":
                 artifact.unlink()
-        printed = subprocess.run([sys.executable, "-B", "check_assignment.py"], cwd=fresh, capture_output=True,
+        printed = subprocess.run([sys.executable, "-B", "check_assignment.py", "--local-checks"], cwd=fresh, capture_output=True,
                                  text=True, check=False).stdout
     assert shown.group(1) in printed, (shown.group(1), printed)
     assert printed.endswith(
@@ -363,7 +411,7 @@ def run_handout_copy() -> None:
         "output/vitals_report.txt (all 7 checks); output/followup_list.txt (all 3 checks).\n"), printed
 
     print(f"Assignment 02 handout: all {len(files)} check files match 02/assignment_checks byte for byte, and a "
-          "fresh handout prints the README's Before Task 1 example.")
+          "fresh handout prints CHECKS.md's Before Task 1 example.")
 
 
 if __name__ == "__main__":

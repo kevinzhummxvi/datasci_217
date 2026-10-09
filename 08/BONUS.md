@@ -208,6 +208,14 @@ C             0      0
 
 Forward-filling or interpolating fabricates values the same way: `means.ffill()` copies A's South mean (12.0) into B and C, which have no South rows. To keep only complete rows, use `means.dropna()` (here, only A).
 
+### Group Coverage Edge Cases
+
+- `pd.pivot_table(..., dropna=True)`, the default, drops rows with a missing key and also any row or column whose cells all came out `NaN`.
+- Counting an unused category gives `0`, so its row stays; averaging one gives `NaN` in every cell, so the row disappears unless you pass `dropna=False`.
+- The kept `NaN` row is not always last: with a categorical key, `observed=False`, and a `columns=` key, `pivot_table` puts it first, so find it by its label.
+- For plain text keys, `observed` does nothing.
+- `pd.Categorical(values, categories=[...])` turns a value missing from `categories=` into `NaN`, with a warning that a future pandas will raise an error instead, so list every value that occurs.
+
 # Hierarchical Grouping and MultiIndex
 
 ## MultiIndex Operations
@@ -269,6 +277,97 @@ def hierarchical_analysis(df):
     return result
 ```
 
+## Summary Statistics by Level
+
+`groupby(level=...)` takes a level name as well as a position, and columns with levels can be grouped by transposing first.
+
+### Reference Card: Summary statistics by level
+
+- `df.groupby(level='level_name').sum()`: Aggregate by level name instead of position
+- `df.T.groupby(level='col_level').sum().T`: Aggregate by a column level; transpose so it becomes a row level, then transpose back
+
+### Code Snippet: Aggregate by level
+
+```python
+data = pd.DataFrame(
+    np.arange(12).reshape((4, 3)),
+    index=[['West', 'West', 'East', 'East'], ['Q1', 'Q2', 'Q1', 'Q2']],
+    columns=['Revenue', 'Costs', 'Profit']
+)
+data.index.names = ['Region', 'Quarter']
+
+print(data.groupby(level='Region').sum())
+#         Revenue  Costs  Profit
+# Region
+# East         15     17      19
+# West          3      5       7
+
+print(data.groupby(level='Quarter').mean())
+#          Revenue  Costs  Profit
+# Quarter
+# Q1           3.0    4.0     5.0
+# Q2           6.0    7.0     8.0
+```
+
+Columns can have levels too. Transpose so the column level becomes a row level while grouping:
+
+```python
+frame = pd.DataFrame(
+    np.arange(12).reshape((3, 4)),
+    index=['a', 'b', 'c'],
+    columns=[['Ohio', 'Ohio', 'Colorado', 'Colorado'],
+             ['Green', 'Red', 'Green', 'Red']]
+)
+frame.columns.names = ['state', 'color']
+print(frame.T.groupby(level='color').sum().T)
+# color  Green  Red
+# a          2    4
+# b         10   12
+# c         18   20
+```
+
+# Reshaping Grouped Results with stack() and unstack()
+
+- The lecture's two-key results have a `MultiIndex`; `unstack()` moves the inner row level into columns and `stack()` moves columns back into rows.
+- In pandas 3, `stack()` keeps missing combinations as `NaN` rows; dropping or zero-filling them is a separate choice.
+
+## Preserving Missing Combinations
+
+### Reference Card: `stack()` and `unstack()` missing-value behavior
+
+- `df.stack()`: Move columns into an inner row level, preserving missing combinations; the former `dropna=` argument is no longer accepted
+- `df.stack().dropna()`: Keep only observed values after reshaping
+- `series.unstack(fill_value=0)`: Rebuild a table and fill combinations absent from the Series index
+- Preserving a missing marker is different from replacing it with zero
+
+### Code Snippet: Preserve vs. drop missing responses
+
+```python
+survey = pd.DataFrame({
+    'Q1': [5, 4, np.nan, 3],
+    'Q2': [4, np.nan, 5, 4],
+    'Q3': [np.nan, 5, 4, np.nan]
+}, index=['Alice', 'Bob', 'Charlie', 'Diana'])
+
+stacked_all = survey.stack()
+print(len(stacked_all))          # 12
+print(stacked_all.isna().sum())  # 4
+
+# Drop missing responses only when the question calls for observed values.
+stacked_observed = stacked_all.dropna()
+print(len(stacked_observed))     # 8
+
+# Filling with zero is a separate substantive decision.
+print(stacked_observed.unstack(fill_value=0))
+#           Q1   Q2   Q3
+# Alice    5.0  4.0  0.0
+# Bob      4.0  0.0  5.0
+# Charlie  0.0  5.0  4.0
+# Diana    3.0  4.0  0.0
+```
+
+Keeping the full result lets a later analysis distinguish a recorded missing value from a combination removed from the table.
+
 # Advanced Statistical Aggregations
 
 ## Rolling Statistics
@@ -327,7 +426,7 @@ df.groupby('category')['value'].apply(percentile_agg)
 
 ## Statistical Tests in Groups
 
-This optional example requires SciPy, which is not part of Lecture 08's recorded core environment. Install it in the active notebook environment with `%pip install scipy` before running the example.
+This optional example requires SciPy, which is not part of Lecture 08's recorded core environment. Add it to the project with `uv add scipy` (in Colab, run `%pip install scipy` in a cell) before running the example.
 
 ### Reference Card: Statistical Tests in Groups
 
@@ -433,7 +532,7 @@ The grouped weighted-mean workflow in [Pivot Table with Custom Functions](#pivot
 
 # Advanced GroupBy Transformations
 
-Lecture 09 teaches grouped lags and rolling windows for time-ordered rows, including past-only windows for prediction: [Entity-Aware Features and Past-Only Windows](../09/README.md#entity-aware-features-and-past-only-windows).
+Lecture 09 teaches grouped lags and rolling windows for time-ordered rows, including past-only windows for prediction.
 
 ## Ranking Within Groups
 
@@ -551,6 +650,31 @@ custom_gb = CustomGroupBy(df, ['category'])
 result = custom_gb.custom_agg('value', lambda x: x.quantile(0.95))
 ```
 
+# Measure, Then Optimize
+
+Measure first, with the tools from the lecture's Measure Before Optimizing card, and change only the step where the time or memory goes.
+
+## Timing and Memory Tools
+
+### Code Snippet: Measure Before and After
+
+On `labs`, one million glucose results with a text `clinic` column:
+
+```python
+labs = pd.DataFrame({'patient_id': rng.integers(0, 10_000, 1_000_000),
+                     'clinic': rng.choice(['North', 'South', 'East', 'West'], 1_000_000),
+                     'glucose': rng.normal(100, 15, 1_000_000).round(1)})
+print(round(labs['clinic'].memory_usage(deep=True) / 1e6, 1))   # 53.5 (MB as text)
+labs['clinic'] = labs['clinic'].astype('category')
+print(round(labs['clinic'].memory_usage(deep=True) / 1e6, 1))   # 1.0 (MB as category)
+
+by_patient = labs.groupby('patient_id')['glucose']
+%timeit by_patient.agg('std')                                   # about 9 ms
+%timeit by_patient.agg(lambda s: s.std())                       # about 450 ms: same values, ~50x slower
+```
+
+Colab has the `pyarrow` package installed, which stores text more compactly, so there the text column takes 12.5 MB instead of 53.5; the category takes 1.0 MB either way.
+
 # Scaling Past Memory: Chunks and Processes
 
 The lecture's first moves are to measure, compute several summaries in one `.agg()` call, prefer built-in aggregations, and store repeated text keys as `category`. When a file is still too large to load, or one CPU core is the bottleneck, two further options exist. Both add complexity, so time the complete operation before and after.
@@ -609,11 +733,44 @@ def parallel_groupby(df, n_processes=4):
 
 # Advanced Remote Computing
 
-The core lecture introduces SSH, file transfer, Jupyter port forwarding, and persistent terminal sessions. The tools below extend that workflow to distributed and cloud-managed data processing.
+The core lecture introduces SSH, file transfer, and persistent terminal sessions. The tools below extend that workflow to Jupyter on a server and to distributed and cloud-managed data processing.
+
+## Run Jupyter Through an SSH Tunnel
+
+`jupyter lab` (Lecture 04) starts Jupyter as a small web server that your browser talks to. Programs like this listen on a numbered **port**; Jupyter uses 8888 by default. On a shared server, start Jupyter so it accepts connections only from `127.0.0.1`, also called **localhost** ("this same computer"), so nobody else on the network can reach it. An **SSH tunnel**, a private pipe inside your SSH connection, then carries anything sent to port 8888 on your laptop to port 8888 on the server: your browser works as if Jupyter were local, while the kernel, files, memory, and CPU are on the server.
+
+```text
+laptop browser → localhost:8888 ══ SSH tunnel ══> server localhost:8888 → Jupyter
+```
+
+### Reference Card: Jupyter Through a Tunnel
+
+- `jupyter lab --ip=127.0.0.1 --port=8888 --no-browser` (on the server, inside tmux): Start Jupyter for localhost only; it prints a URL ending in `?token=...`, a password generated for this session.
+- `ssh -N -L 8888:127.0.0.1:8888 user@host` (in a second, local terminal): `-L laptop_port:server_address:server_port` builds the tunnel; `-N` opens no remote shell, so the terminal shows nothing while the tunnel is open.
+- Paste the printed `http://127.0.0.1:8888/lab?token=...` URL into your laptop's browser.
+- If the server's 8888 is taken (common on a shared server), Jupyter quietly moves to 8889 or higher. Read the port in the URL it prints and use that number as the last field of `-L`, such as `-L 8888:127.0.0.1:8889` for a URL on `:8889`; then open the URL with 8888 in place of the server's port.
+- `Ctrl+C` in the tunnel terminal: Close the tunnel; Jupyter keeps running in tmux.
+- If port 8888 is already in use on your laptop (for example, by a local Jupyter), use `-L 8889:127.0.0.1:8888` and change 8888 to 8889 in the URL.
+
+### Code Snippet: Start Jupyter and Open the Tunnel
+
+On the server, in a project whose `pyproject.toml` lists JupyterLab (`uv add jupyterlab` adds it), start a persistent session, then launch Jupyter inside it:
+
+```bash
+tmux new -s notebooks
+source .venv/bin/activate
+jupyter lab --ip=127.0.0.1 --port=8888 --no-browser
+```
+
+In a second, local terminal:
+
+```bash
+ssh -N -L 8888:127.0.0.1:8888 username@server.example
+```
 
 ## Distributed Computing
 
-Dask is not part of Lecture 08's core environment. Install it with `%pip install "dask[dataframe]"` before running this example.
+Dask is not part of Lecture 08's core environment. Add it to the project with `uv add "dask[dataframe]"` (in Colab, `%pip install "dask[dataframe]"`) before running this example.
 
 ### Reference Card: Distributed Computing with Dask
 
@@ -635,7 +792,7 @@ result.to_csv('distributed_results.csv')
 
 ## Cloud Computing
 
-pandas reads and writes `s3://` paths directly once the `s3fs` package is installed (`%pip install s3fs`) and your AWS credentials are configured. Without `s3fs`, `pd.read_csv('s3://...')` raises `ImportError: Install s3fs to access S3`.
+pandas reads and writes `s3://` paths directly once the `s3fs` package is installed (`uv add s3fs`; in Colab, `%pip install s3fs`) and your AWS credentials are configured. Without `s3fs`, `pd.read_csv('s3://...')` raises `ImportError: Install s3fs to access S3`.
 
 ### Reference Card: Cloud Computing with S3
 
@@ -658,7 +815,7 @@ Under pandas 3, inferred text uses the `str` dtype and Copy-on-Write makes view-
 
 ## Memory Profiling and Optimization
 
-The example below needs the `psutil` and `memory_profiler` packages (`%pip install psutil memory_profiler`).
+The example below needs the `psutil` and `memory_profiler` packages (`uv add psutil memory_profiler`; in Colab, `%pip install psutil memory_profiler`).
 
 ### Understanding Memory Usage in pandas
 
@@ -1056,7 +1213,7 @@ class PerformanceAnalyzer:
                     'time_per_row': execution_time / size
                 })
 
-                print(f"  Size {size:,}: {execution_time:.4f}s ({execution_time/size*1000:.2f}ms per 1000 rows)")
+                print(f"  Size {size:,}: {execution_time:.4f}s ({execution_time/size*1_000_000:.2f}ms per 1000 rows)")
 
             except Exception as e:
                 print(f"  Size {size:,}: FAILED: {str(e)}")

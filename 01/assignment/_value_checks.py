@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import difflib
+from decimal import Decimal, DecimalException
 from pathlib import Path
 import re
 
@@ -233,8 +234,14 @@ def _readiness_report(root: Path) -> str:
 
 
 def _without_whitespace(line: str) -> str:
-    """The line with every whitespace character removed, which is how report lines are compared."""
-    return "".join(line.split())
+    """Compare case, whitespace, and equivalent numeric spellings equally."""
+    def number(match):
+        try:
+            return str(Decimal(match.group()).normalize())
+        except DecimalException:
+            return match.group()
+    line = re.sub(r"(?<![\w.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", number, line)
+    return "".join(line.split()).casefold()
 
 
 def _label(line: str) -> str:
@@ -367,6 +374,72 @@ def practice_file_check(name: str) -> Callable[[Path], None]:
     return check
 
 
+# Likely causes for a supplied value left changed after testing, or a print left outside its loop.
+LIST_CAUSE = " Likely cause: the measurements list was changed; restore `measurements = [18, 21, 24, 19]`."
+PARTICIPANT_CAUSE = (" Likely cause: the participant count was changed; restore "
+                     "`participant_count_text = \"4\"`.")
+LOOP_CAUSE = (" Likely cause: the `print()` for each measurement sits after the `for` loop, so it runs only "
+              "once; indent it inside the loop.")
+SUPPLIED_MEASUREMENTS = ("18", "21", "24", "19")
+MEASUREMENT_LINES = tuple(line for line in GRADED_LINES if line.startswith("Measurement:"))
+
+
+def _number(text: str):
+    """The text as a Decimal, or None when it is not a finite number."""
+    try:
+        number = Decimal(text.strip())
+    except DecimalException:
+        return None
+    return number if number.is_finite() else None
+
+
+def _saved_measurements(report: str) -> list[str]:
+    """The value after each `Measurement:` label in the report, in order."""
+    return [value.strip() for line in report.splitlines()
+            for key, colon, value in [line.partition(":")]
+            if colon and _label(key) == "measurement"]
+
+
+def _has_line(report: str, line: str) -> bool:
+    return _without_whitespace(line) in map(_without_whitespace, report.splitlines())
+
+
+def _likely_cause(label: str, yours: str, values: dict) -> str:
+    """A hint naming the usual beginner mistake behind a wrong value, or "" when none fits."""
+    value = yours.partition(":")[2].strip()
+    if label == "Mean":
+        try:
+            total, count, mean = Decimal(values["total"]), Decimal(values["count"]), Decimal(value)
+            floored = total // count
+        except (KeyError, DecimalException):
+            return ""
+        if mean == floored and total % count:
+            return " Likely cause: `//` drops the decimal part; divide with `/` instead."
+    elif label == "Next checkpoint":
+        if value == values.get("participantcount", "") + "1":
+            return (" Likely cause: text was joined to text instead of added; convert with `int()` "
+                    "(use `participant_count`) before adding 1.")
+    elif label == "Measurement":
+        number, _, words = value.partition(" ")
+        try:
+            above = Decimal(number) >= 20
+        except DecimalException:
+            return ""
+        if number not in SUPPLIED_MEASUREMENTS:
+            return LIST_CAUSE
+        if (words.casefold() == "review") != above:
+            return (" Likely cause: the label disagrees with a threshold of 20; compare each measurement "
+                    "itself (not a running total) with `>=`, and keep `review_threshold_text = \"20\"`.")
+    elif label == "Participant count":
+        if re.fullmatch(r"\d+", value) and value != "4":
+            return PARTICIPANT_CAUSE
+    elif label == "Review count":
+        if value and value == values.get("count"):
+            return (" Likely cause: the counter grows on every pass of the loop; add 1 to it only "
+                    "inside the `review` branch of your `if`.")
+    return ""
+
+
 def report_line_check(index: int) -> Callable[[Path], None]:
     expected, source = GRADED_LINES[index], LINE_SOURCES[index]
     fix = (
@@ -376,6 +449,70 @@ def report_line_check(index: int) -> Callable[[Path], None]:
 
     def check(root: Path) -> None:
         report = _readiness_report(root)
+        # Follow-on calculations use the student's declared earlier values.
+        label = expected.partition(":")[0]
+        values = {}
+        for line in report.splitlines():
+            key, colon, value = line.partition(":")
+            if colon:
+                values.setdefault(_label(key), value.strip())
+        if label == "Mean":
+            # Compared as numbers: Python prints 64 / 3 as 21.333333333333332, not a Decimal's 28 digits.
+            total, count, mean = (_number(values.get(key, "")) for key in ("total", "count", "mean"))
+            if None not in (total, count, mean) and count and abs(
+                float(mean) - float(total) / float(count)
+            ) < 1e-9:
+                return
+        # A supplied value changed and left that way is charged once, on the first line that shows it;
+        # the lines calculated from it are judged against the student's own saved lines.
+        measurements = _saved_measurements(report)
+
+        def own(line: str) -> bool:
+            """The report holds this line, calculated from the student's own values, in place of the expected one."""
+            return _without_whitespace(line) != _without_whitespace(expected) and _has_line(report, line)
+
+        numbers = [_number(value.split()[0]) if value.split() else None for value in measurements]
+        parsed = bool(measurements) and None not in numbers
+        if label == "Review count":
+            if parsed and all(
+                re.fullmatch(r"[-+]?\d+(?:\.\d+)?\s+(?:review|within\s+range)", value, re.I)
+                for value in measurements
+            ):
+                own_reviews = sum(value.casefold().endswith("review") for value in measurements)
+                if _has_line(report, f"Review count: {own_reviews}"):
+                    return
+        if label == "Total" and parsed and own(f"Total: {sum(numbers)}"):
+            return
+        if label == "Count" and parsed and own(f"Count: {len(measurements)}"):
+            if len(measurements) <= len(MEASUREMENT_LINES):
+                return
+            raise AssertionError(
+                f"The line should read `{expected}`; yours reads `Count: {len(measurements)}`, matching the "
+                f"{len(measurements)} Measurement lines saved.{LIST_CAUSE} {fix}"
+            )
+        if label == "Next checkpoint":
+            participants = _number(values.get("participantcount", ""))
+            if participants is not None and own(f"Next checkpoint: {participants + 1}"):
+                return
+        # Fewer Measurement lines than the supplied data, each of them correct, is one mistake: charge
+        # only the first missing line.
+        if label == "Measurement" and 0 < len(measurements) < len(MEASUREMENT_LINES) and all(
+            any(_without_whitespace(f"Measurement: {value}") == _without_whitespace(line)
+                for line in MEASUREMENT_LINES)
+            for value in measurements
+        ):
+            if _has_line(report, expected):
+                return
+            first_missing = next(line for line in MEASUREMENT_LINES if not _has_line(report, line))
+            if expected != first_missing:
+                return
+            count = _number(values.get("count", ""))
+            cause = (LIST_CAUSE if count == len(measurements)
+                     else LOOP_CAUSE if len(measurements) == 1 else "")
+            raise AssertionError(
+                f"output/readiness.txt has {len(measurements)} Measurement line(s) where the supplied data "
+                f"gives {len(MEASUREMENT_LINES)}; the first missing one is `{expected}`.{cause} {fix}"
+            )
         unmatched = _unmatched_lines(report)
         if index not in unmatched:
             return
@@ -388,7 +525,8 @@ def report_line_check(index: int) -> Callable[[Path], None]:
                 else f"output/readiness.txt has no line reading `{expected}` {_between(index)}. {fix}"
             )
         place = "yours reads" if same_label else "in its place yours reads"
-        raise AssertionError(f"The line should read `{expected}`; {place} `{_shown(yours)}`. {fix}")
+        cause = _likely_cause(label, yours, values) if same_label else ""
+        raise AssertionError(f"The line should read `{expected}`; {place} `{_shown(yours)}`.{cause} {fix}")
 
     return check
 

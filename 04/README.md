@@ -13,162 +13,150 @@ See [BONUS.md](BONUS.md) for the optional extensions.
 
 **Live notebooks in Colab:** [Demo 1](https://colab.research.google.com/github/christopherseaman/datasci_217/blob/main/04/demo/demo1_jupyter_basics.ipynb) · [Demo 2](https://colab.research.google.com/github/christopherseaman/datasci_217/blob/main/04/demo/demo2_pandas_basics.ipynb) · [Demo 3](https://colab.research.google.com/github/christopherseaman/datasci_217/blob/main/04/demo/demo3_data_io.ipynb)
 
+**Run locally:**
+
+```shell
+curl -fsSL https://raw.githubusercontent.com/christopherseaman/datasci_217/main/04/demo/setup_demo.sh | sh
+cd ~/04-demo
+uv venv --seed
+source .venv/bin/activate
+uv sync
+```
+
+→ Then open the `04-demo` folder in VS Code.
+
+This lecture covers McKinney, _Python for Data Analysis_ (3rd ed.):
+
+- 2.2 (running the Jupyter notebook)
+- Chapter 5 (getting started with pandas)
+- Chapter 6 (data loading, storage, and file formats)
+- Appendix B.2 and B.5 (magic commands, and timing code with `%timeit`)
+
 # Jupyter Notebooks: Interactive Data Analysis
 
-A **Jupyter notebook** (`.ipynb` file) is a document made of **cells**: a **code cell** holds Python, and a **Markdown cell** holds formatted notes like the ones you wrote in Lecture 02. Think of a lab notebook, where the procedure, the measurement, and your interpretation sit on the same page. When you run a code cell, its result appears directly beneath it and is saved in the file.
+- **Jupyter notebook**: a `.ipynb` file of cells you run one at a time, each with its result shown beneath it, so data, code, and notes sit together.
+- **Code cell**: Python; its output appears below the cell.
+- **Markdown cell**: notes and headings that explain the analysis.
+- **Kernel**: the Python process that runs the cells and keeps their values between runs, so data loads once and every later cell can use it.
 
-Notebooks suit exploring data. You load a clinic's visit file once, look at the first rows, try a fix, and look again without reloading the file, and your explanation sits next to the results so a colleague can follow your reasoning.
-
-The code runs in a **kernel**: a Python process that stays alive between cells, so values persist as they do at the `>>>` prompt instead of starting fresh like a `.py` script. A kernel uses one Python environment, so choosing a notebook's kernel is how you point it at the `.venv` you created in Lecture 03. Scripts remain the better fit for automation; notebooks are for exploring and explaining.
+<callout icon="📣" color="blue_bg">
+	## Jupyter Notebooks can be Published!
+	Python, R, and Julia notebooks can be published using [Quarto](https://quarto.org). Some data scientists go so far as to use it as a technical blogging platform! (see: [Demetri](https://dpananos.github.io))
+</callout>
 
 ## Opening and Running a Notebook
 
-You will use notebooks in two places. Assignments run locally in VS Code. Lecture demos open in **Google Colab**, a free hosted notebook service that runs in your browser. In Colab the kernel runs on a Google machine called a **runtime**; files you create there disappear when the runtime shuts down. Colab ships an older pandas, so each demo's first cell installs the course version with the `%pip` magic command shown below.
+- **VS Code** (assignments): open the `.ipynb` file (install the **Jupyter** extension if VS Code offers it), click **Select Kernel** at the top right, and choose the project's `.venv`.
+- **Google Colab** (demos): free notebooks in the browser. The kernel runs on a Google machine, the **runtime**, and files made there disappear when it shuts down.
 
-![VS Code notebook: add code or Markdown, run cells, run all, and select a kernel](media/vscode-jupyter-kernel-picker.png)
+![VS Code notebook toolbar: add a Code or Markdown cell, Run All, and Select Kernel at the top right](media/vscode-jupyter-kernel-picker.png)
 
-In VS Code, open any `.ipynb` file, click **Select Kernel** (top right), and choose the activity's Python environment. If VS Code offers the **Jupyter** extension when you open the file, install it. The environment also needs **ipykernel**, the package that lets Jupyter start a kernel from that environment's Python: once per environment, activate it in the terminal and run `uv pip install ipykernel`. **Run All** runs every cell in order; **Clear All Outputs** erases the results saved under the cells.
+![A run cell in VS Code: Run All in the toolbar, run-above and run-below on the cell's own toolbar, and the output beneath the cell](media/vscode-jupyter-run-cells.png)
+
+<callout icon="⚠️" color="yellow_bg">
+	## `No module named 'pandas'`? Wrong venv?
+	Click the kernel name at the top right and choose the project's `.venv`, even if the terminal's environment is active.
+</callout>
 
 ### Reference Card: Notebook controls
 
 | Task | VS Code | Colab | Result |
 | --- | --- | --- | --- |
 | Create a notebook | Command Palette → **Create: New Jupyter Notebook** | **File → New notebook in Drive** | New `.ipynb` file |
-| Run a cell | `Shift+Enter` (run, move on) or `Ctrl+Enter` (run, stay) | Same keys | Output appears below the cell |
+| Open a notebook | **File → Open File…**; from GitHub, Command Palette → **Git: Clone**, then open the `.ipynb` (sign in to GitHub if asked) | **File → Open notebook → GitHub**: paste the repository URL; private repositories need **Include private repos** and a GitHub sign-in | Notebook open, ready to run |
+| Run a cell | ▷ beside the cell, `Shift+Enter` (run, move on), or `Ctrl+Enter` (run, stay) | Same | Output appears below the cell |
+| Run every cell | **Run All** | **Runtime → Run all** | Cells run top to bottom |
 | Add a cell | **+ Code** / **+ Markdown** | **+ Code** / **+ Text** | New cell |
 | Delete a cell | Trash icon, or `DD` in command mode | Trash icon | Cell removed |
-| Move a cell | Drag the bar at the cell's left, or `Alt+Up` / `Alt+Down` in command mode (`Option` on Mac) | `Ctrl+M K` (up) / `Ctrl+M J` (down), or the arrows on the cell's toolbar | Cell moves, code and output together |
-| Prepare an environment | `uv pip install ipykernel` in the activated `.venv`, once | Nothing to do | The environment can run notebook cells |
-| Choose Python | **Select Kernel** | Managed for you by the runtime | Which interpreter runs the cells |
-| Keep your changes | `Ctrl+S` (`Cmd+S` on macOS) | **File → Save a copy in Drive** | Edits saved; Colab does not save back to the course repository |
+| Move a cell | Drag the bar at the cell's left, or `Alt+Up` / `Alt+Down` (`Option` on Mac) | Arrows on the cell's toolbar | Cell moves with its output |
+| Choose Python | **Select Kernel** | Managed by the runtime | Which interpreter runs the cells |
+| See the kernel's state | **Variables** in the toolbar | **{x}** in the left sidebar | Every name with its type and value |
+| Save changes | `Ctrl+S` (`Cmd+S` on macOS) | `Ctrl+S`, or **File → Save** (to Drive; opened from GitHub, see the next row) | Notebook file updated |
+| Commit changes | **Source Control**: message, **Commit**, **Sync Changes** (signed in to GitHub; clear outputs if desired and save first) | Opened from GitHub: **File → Save**, then authorize GitHub and fill in the save dialog below; otherwise **File → Save a copy in GitHub** | Notebook committed to GitHub |
 
-Shortcuts such as `A` (add a cell above), `B` (add a cell below), `DD` (delete), and `Alt+Up` (move up) work only in **command mode**: press `Esc` so the cell is selected but not being edited. In Colab, press `Ctrl+M` first, then the letter; there, `Ctrl+M K` moves a cell up.
+- Letter shortcuts such as `A` (add above), `B` (below), and `DD` (delete) work in **command mode**: press `Esc` first. In Colab, press `Ctrl+M`, then the letter.
 
-### Code Snippet: A notebook cell
-
-```python
-# Cell 1: the kernel keeps these values
-patient_id = "P001"
-temps_c = [36.8, 37.4, 38.1]
-```
-
-```python
-# Cell 2: a later cell can use them, and its output appears below it
-average = sum(temps_c) / len(temps_c)
-print(f"{patient_id} average temperature: {average:.1f} °C")
-```
-
-```text
-P001 average temperature: 37.4 °C
-```
+![Colab's Save in GitHub dialog: repository, branch, file path, and commit message](media/colab-save-in-github.png)
 
 ### Alternative: JupyterLab
 
-JupyterLab is Jupyter's own browser interface, started with `jupyter lab` from an environment that has it installed. The parts are the same: a file browser, cells with a run number such as `[4]` beside them, and output beneath each cell.
+JupyterLab is Jupyter's own browser interface, started with `jupyter lab` in an environment that lists `jupyterlab`.
 
-![JupyterLab: file browser at left, notebook cells and output in the center](media/jupyterlab-interface.png)
+![JupyterLab: file browser at left, notebook cells and their output in the center](media/jupyterlab-interface.png)
 
 ## Kernel State and Execution Order
 
-The kernel's **state** is every name and value it currently holds. Running a cell changes state; editing a cell without running it does not. The number beside a cell, such as the `[4]` in the JupyterLab screenshot, is its **execution count**: the order in which the kernel actually ran it. The kernel follows the order you click, not the order of cells on the page. A notebook can therefore look correct and still depend on something you ran earlier and then changed or deleted.
+- **State**: every name and value the kernel holds. Running a cell changes it; editing a cell without running it does not.
+- **Stored output**: the result saved under a cell from its last run, not proof the notebook works now.
 
-The result saved under a cell is **stored output**: a record of the last time that cell ran, not proof that the notebook works now.
+![VS Code Variables view: every name the kernel holds, with its type, size, and value](media/vscode-jupyter-variables.png)
 
-| Step | You do | Execution count | Output under the cell |
+### Example Notebook State Changes
+
+```python
+# Cell 1
+days = 12
+doses = 2
+```
+
+```python
+# Cell 2
+doses = days * doses
+doses
+```
+
+| Step | You do | Variables view | Output |
 | --- | --- | --- | --- |
-| 1 | Run `days = 12` and `doses_per_day = 2` | `[1]` | none |
-| 2 | Run `total_doses = days * doses_per_day` and `print(total_doses)` | `[2]` | `24` |
-| 3 | Edit the first cell to `doses_per_day = 3` but do not run it | still `[1]` | `24`, now stale |
-| 4 | Restart & Run All | `[1]`, `[2]` | `36` |
+| 1 | Run Cell 1 | `days` 12, `doses` 2 | nothing yet |
+| 2 | Run Cell 2 | `doses` to 24 | `24` |
+| 3 | Run Cell 2 (again) | `doses` to 288 | `288` |
+| 4 | Edit Cell 1 to `doses = 3`, do not run it | `doses` still 288 | `288`, now stale |
+| 5 | **Restart**, then **Run All** | `doses` 36 | `36` |
 
 ### Reference Card: Kernel actions
 
-| Action | Where | When to use it | Result |
+| Action | Where | When | Result |
 | --- | --- | --- | --- |
-| Interrupt | VS Code: **Interrupt** (■); Colab: **Runtime → Interrupt execution** | A cell runs far longer than expected; the notebook's Ctrl+C from Lecture 01 | Stops the cell; state is kept |
-| Restart | VS Code: **Restart**; Colab: **Runtime → Restart session** | Values look wrong, the kernel is stuck, or "it worked before but now it doesn't" | Empty state; cells and stored output stay on the page |
-| Run All | VS Code: **Run All**; Colab: **Runtime → Run all** | After a restart | Every cell runs top to bottom |
-| Restart & Run All | VS Code: **Restart**, then **Run All**; Colab: **Runtime → Restart session and run all** | Before you commit or submit | Shows the notebook works from a fresh start |
+| Interrupt | VS Code: **Interrupt** (■); Colab: **Runtime → Interrupt execution** | A cell runs far too long (the notebook's Ctrl+C) | Cell stops; state kept |
+| Restart | VS Code: **Restart**; Colab: **Runtime → Restart session** | Values look wrong, or "it worked before" | State emptied; cells and stored output stay |
+| Restart & Run All | VS Code: **Restart**, then **Run All**; Colab: **Runtime → Restart session and run all** | Before you commit or submit | Proves the notebook works from a fresh start |
 
-### Code Snippet: A producer cell and a dependent cell
+A cell that uses a name defined in a cell below it stops Restart & Run All with `NameError: name 'days' is not defined`. Move the defining cell up.
 
-```python
-# Cell 1 (producer): defines names
-days = 12
-doses_per_day = 3
-```
-
-```python
-# Cell 2 (dependent): needs the names from Cell 1
-total_doses = days * doses_per_day
-print("total doses:", total_doses)  # total doses: 36
-```
-
-If Cell 2 sits above Cell 1, Restart & Run All stops with `NameError: name 'days' is not defined`. Fix it by moving the producer cell above the dependent cell (**Move a cell** in the controls card), not by copying the definition into another cell.
-
-To run a whole notebook from the terminal instead, see [Running notebooks non-interactively](BONUS.md#running-notebooks-non-interactively).
+![xkcd 2200: Unreachable State. Cells run out of order can leave the kernel in a state no top-to-bottom run would reach](media/xkcd_2200.png)
 
 ## Jupyter Magic Commands
 
-**Magic commands** are notebook-only shortcuts that start with `%`. `%pwd` and `%ls` mirror the Lecture 01 shell commands and show where the notebook is running and which files it can see; check them first when a notebook cannot find a file. `%timeit` times one line of Python by running it many times. `%pip install` installs a package into the running kernel's environment; every demo notebook's first cell uses it to install the course's pandas 3.0.5.
-
-_Think of magic commands as the Konami code of Jupyter: instead of 30 extra lives, you get shell shortcuts and a stopwatch._
+**Magic commands** are notebook-only shortcuts that start with `%`. Check `%pwd` and `%ls` first when a notebook cannot find a file.
 
 ### Reference Card: Magic commands
 
-| Command | Arguments | Typical output / effect |
+| Command | Effect |
+| --- | --- |
+| `%pwd` | Current working directory, as a quoted string; give it its own cell |
+| `%ls` | Files in that directory |
+| `%timeit expression` | Runs one line many times and reports how long it takes |
+| `%pip install -q --no-warn-conflicts pandas==3.0.5` | Installs into the kernel's environment, as each demo's first cell does; `-q` prints less |
+| `!command` | Runs a shell command; `!uv add pyarrow` installs and records a package in `pyproject.toml` |
+
+After an install, restart the kernel if the package was already imported; Colab may ask you to.
+
+## Notebooks vs Scripts
+
+| | Notebook cell | `.py` script |
 | --- | --- | --- |
-| `%pwd` | None | Current working directory, as a quoted string |
-| `%ls` | None | Directory contents |
-| `%timeit expression` | Python expression | Timing summary |
-| `%pip install -q pandas==3.0.5` | Package and exact version; `-q` prints less | Package installed into the kernel's environment; restart the kernel if it was already imported |
-| `%pip install -r requirements.txt` | Requirements path | Every listed package installed |
-| `%pip show package_name` | Package name | Installed version and location |
-
-### Code Snippet: Where is the notebook running?
-
-A cell shows the value of its last line only, so give `%pwd` its own cell:
-
-```python
-%pwd
-```
-
-```text
-'/content'
-```
-
-That is Colab's working directory; in VS Code, it is usually the notebook's folder.
-
-```python
-%timeit sum(range(100))
-```
-
-```text
-693 ns ± 3.46 ns per loop (mean ± std. dev. of 7 runs, 1,000,000 loops each)
-```
-
-Times vary by machine.
-
-### Code Snippet: Install a package into the kernel
-
-```python
-# First cell of each demo notebook, in Colab or VS Code
-%pip install -q pandas==3.0.5
-```
-
-```text
-Note: you may need to restart the kernel to use updated packages.
-```
-
-`%pip` installs with the kernel environment's own pip. The `.venv` you made in Lecture 03 with `uv venv --seed` includes pip, so the same cell works in VS Code as in Colab.
-
-A package that was already imported keeps its old version until the kernel restarts, which is what the note means. If Colab asks you to restart after the install, choose **Runtime → Restart session** and run the notebook from the top; the install then finishes at once.
-
-In Colab, pip may also print `ERROR: pip's dependency resolver does not currently take into account all the packages that are installed...` followed by a line such as `google-colab ... requires pandas==..., but you have pandas 3.0.5 which is incompatible.` The install still succeeded: the demos do not use those Colab packages, and Demos 2 and 3 confirm the version with `pd.__version__` in the next cell.
+| A bare last expression, such as `len(temps_c)` | Shown below the cell | Shown nowhere |
+| `display(data_frame)` | Draws a formatted table | Unavailable; use `print()` |
+| `display(Markdown(f"**Mean:** {mean_c:.1f} °C"))`, after `from IPython.display import Markdown` | Renders formatted text, such as a bold label beside a result | Unavailable; use `print()` |
+| Magic commands (`%pwd`, `%pip`) | Work | `SyntaxError` |
+| Values from earlier runs | Kept until the kernel restarts | Every run starts fresh |
 
 ## Notebook Outputs and Git
 
-A notebook saves each cell's output inside the `.ipynb` file, next to the code. Anything a cell printed, such as a patient name or a password, is committed with the notebook and stays in Git history. Notebooks are like that one friend who screenshots everything you text them.
+<callout icon="⚠️" color="yellow_bg">
+	## Outputs are saved in the notebook file!
+	Anything a cell printed is committed with it and stays in Git history.
+</callout>
 
 ### Code Snippet: What Git actually commits
 
@@ -178,7 +166,7 @@ blood_pressure = "120/80"
 print(patient_name, blood_pressure)  # Example Patient 120/80
 ```
 
-Open the `.ipynb` file in a text editor and that line is right there, in the file Git will commit:
+The `.ipynb` file, opened in a text editor:
 
 ```json
 {"cell_type": "code",
@@ -187,38 +175,36 @@ Open the `.ipynb` file in a text editor and that line is right there, in the fil
               "text": ["Example Patient 120/80\n"]}]}
 ```
 
-### Before You Commit a Notebook
+### Best Practices Before You Commit a Notebook
 
-1. **Clear all outputs**: click **Clear All Outputs** in VS Code (Colab: **Edit → Clear all outputs**).
-2. **Check for sensitive data**: make sure no personal information, passwords, or confidential data is visible.
-3. **Save the notebook**: the outputs are removed from the file.
+When its outputs should not be shared:
 
-Then check the notebook's diff in VS Code Source Control (Lecture 02) before you commit.
+1. **Clear All Outputs** in VS Code (Colab: **Edit → Clear all outputs**).
+2. Check that no personal information, passwords, or confidential data is visible.
+3. Save, then check the notebook's diff in **Source Control** before you commit.
+
+![VS Code notebook diff in Source Control: changed outputs show beside changed code](media/vscode-jupyter-diff.png)
 
 > Never be afraid to make a mistake. Unless it's in Git. Then be afraid. Be very afraid.
 
 # LIVE DEMO!
 
+[Open Demo 1 in Colab](https://colab.research.google.com/github/christopherseaman/datasci_217/blob/main/04/demo/demo1_jupyter_basics.ipynb)
+
 # Introduction to Pandas
 
-![xkcd 2180: Spreadsheets. A spreadsheet quietly grows into a program; pandas lets you write the real code instead](media/xkcd_2180.png)
-
-In Lecture 03, a NumPy array held one type of value and you picked items by integer position, as in `arr[2]`. A clinic's visit table is messier: a text patient ID, an integer age, a decimal temperature, a `True`/`False` smoker flag. You want to ask for "patient P002's temperature" rather than "row 1, column 1", and you want each patient's values to stay together when you sort or filter.
-
-**pandas** is the Python library for labeled tables. It builds on NumPy and adds two structures:
-
-- A **Series** is one column of values plus an **index**, a label for each value. It works like a dictionary from Lecture 02 whose keys stay in order: each label maps to one value.
-- A **DataFrame** is a table whose columns share one row index. Each column is a Series with its own **dtype** (data type), so text, numbers, and `True`/`False` can sit side by side.
+- **pandas** is the Python library for labeled tables, built on NumPy: `import pandas as pd`.
+- A table can mix text IDs, whole-number ages, and decimal temperatures, and you look up a patient by label rather than by position.
+- Outputs below come from pandas 3.0.5, the course version; pandas 2 prints some results differently.
 
 _Fun fact: the name comes from **panel data**, an econometrics term for datasets that follow the same subjects over time (think of a longitudinal cohort study), and it is also a play on "Python data analysis." No bears were involved. 🐼_
 
-pandas is conventionally imported as `pd`. The course uses pandas 3.0.5, and every output below comes from that version; pandas 2 prints some results differently.
-
-```python
-import pandas as pd
-```
+![xkcd 2180: Spreadsheets. A spreadsheet quietly grows into a program; pandas lets you write the real code instead](media/xkcd_2180.png)
 
 ## Series and DataFrames
+
+- **Series**: one column of values plus an **index**, a label for each value, like a dictionary (Lecture 02) whose keys stay in order.
+- **DataFrame**: a table whose columns share one row index. Each column is a Series with its own **dtype** (data type).
 
 ```text
 Series temp_c         DataFrame visits
@@ -229,59 +215,35 @@ P003   37.2           P003    41    37.2   False
                                   ^ the temp_c column is itself a Series
 ```
 
-_Think of Series inside DataFrames like Russian nesting dolls: one labeled column fits inside the larger labeled table._
+### Reference Card: Building Series and DataFrames
 
-### Reference Card: Series attributes and methods
-
-| Item | Purpose / arguments | Output / note |
+| Item | Purpose / arguments | Output |
 | --- | --- | --- |
-| `pd.Series(data, index=None, name=None)` | `data` may be a list, a NumPy array, or a dict (its keys become the index); optional labels and name | New `Series` |
-| `series.index` | Access index labels | `Index(['P001', 'P002', 'P003'], dtype='str')` |
-| `series.values` | Access underlying values without labels | NumPy array or extension array, depending on dtype |
-| `series.name` | Get/set Series name | Series name |
-| `series.dtype` | Get data type | Data type |
-| `series.size` | Number of elements | Integer element count |
-| `series.head(n=5)` | First n elements | `Series` with original labels |
-| `series.tail(n=5)` | Last n elements | `Series` with original labels |
-| `series.describe()` | Summarize values according to dtype | Statistics as a `Series` |
+| `pd.Series(data, index=None, name=None)` | `data` may be a list, a NumPy array, or a dict (its keys become the index) | New `Series` |
+| `pd.DataFrame(data, index=None, columns=None)` | `data` may be a dict of lists, a list of row lists, or a 2D NumPy array, with optional row and column labels | New `DataFrame` |
+| `pd.DataFrame({"mean": s1, "median": s2})` | A dict of Series: each becomes a column, rows matched by index label | New `DataFrame` |
+| `df.index.name = "patient_id"` | Name the row index | Shown above the index; its header in a saved CSV |
+| `obj.index`, `df.columns` | Row labels, column labels | `Index([...])` |
+| `obj.values` | Values without labels | NumPy array |
+| `obj.name`, `obj.dtype`, `df.dtypes` | Series name, Series dtype, dtype of each column | Name or dtype; `df.dtypes` is a Series |
 
-### Code Snippet: Create and inspect a Series
+### Code Snippet: Create a Series and a DataFrame
 
 ```python
 temp_c = pd.Series([36.8, 38.1, 37.2], index=["P001", "P002", "P003"], name="temp_c")
-print(temp_c)
-print(temp_c["P002"])  # 38.1
+display(temp_c)
+print(temp_c["P002"])
 ```
+
+|  | temp_c |
+| --- | --- |
+| P001 | 36.8 |
+| P002 | 38.1 |
+| P003 | 37.2 |
 
 ```text
-P001    36.8
-P002    38.1
-P003    37.2
-Name: temp_c, dtype: float64
 38.1
 ```
-
-_Pro tip: DataFrames are like Excel spreadsheets, but with superpowers. They can handle millions of rows without breaking a sweat, and they never ask you to "save as" or complain about circular references._
-
-### Reference Card: DataFrame attributes and methods
-
-| Item | Purpose / arguments | Output / note |
-| --- | --- | --- |
-| `pd.DataFrame(data, index=None, columns=None)` | Supply data, such as a dict of lists, and optional row/column labels | New `DataFrame` |
-| `pd.DataFrame(array_2d, index=[...], columns=[...])` | Build from a 2D NumPy array, as in Lecture 03 | Labeled `DataFrame` |
-| `df.index.name = "patient_id"` | Label the row index | Shown above the index; becomes the index column's header when you save a CSV |
-| `df.index` | Access row index | Index labels |
-| `df.columns` | Access column names | Column labels |
-| `df.values` | Get values as NumPy array | NumPy array of values |
-| `df.shape` | Count rows and columns | `(rows, columns)` tuple |
-| `df.dtypes` | Data types per column | Series of column dtypes |
-| `df.info()` | Inspect columns, **non-null counts** (values present, not missing), dtypes, and memory | Prints a summary; returns `None` |
-| `df.describe()` | Summarize numeric columns | count, mean, std, min, quartiles, max per column; `std` is the sample SD (`ddof=1`, divides by n − 1), unlike NumPy's `.std()` default (`ddof=0`) |
-| `df.head(n=5)` | First n rows | `DataFrame` with original labels |
-| `df.tail(n=5)` | Last n rows | `DataFrame` with original labels |
-| `df.sample(n=5)` | Random n rows | Random sample DataFrame |
-
-### Code Snippet: Create and inspect a DataFrame
 
 ```python
 visits = pd.DataFrame(
@@ -289,29 +251,29 @@ visits = pd.DataFrame(
     index=["P001", "P002", "P003"],
 )
 visits.index.name = "patient_id"
-print(visits)
-print(visits.shape)  # (3, 3)
-print(visits.dtypes)
+display(visits)
 ```
 
-```text
-            age  temp_c  smoker
-patient_id                     
-P001         34    36.8   False
-P002         58    38.1    True
-P003         41    37.2   False
-(3, 3)
-age         int64
-temp_c    float64
-smoker       bool
-dtype: object
-```
+| patient_id | age | temp_c | smoker |
+| --- | --- | --- | --- |
+| P001 | 34 | 36.8 | False |
+| P002 | 58 | 38.1 | True |
+| P003 | 41 | 37.2 | False |
 
-### Code Snippet: Summarize a DataFrame
+### Reference Card: First look at a table
+
+- `df.head(n)`, `df.tail(n)`: First or last `n` rows (default 5); a `DataFrame`.
+- `df.shape`: `(rows, columns)` tuple.
+- `df.info()`: Index range, **non-null counts** (values present rather than missing), and dtypes; prints and returns `None`.
+- `df.describe()`: Summary statistics for each column.
+- `df.mean(numeric_only=True)`: One mean per numeric column; text columns are left out.
+- `df1.equals(df2)`: `True` when two tables have the same labels, values, and dtypes.
+
+### Code Snippet: Look at a DataFrame
 
 ```python
 visits.info()
-print(visits.describe())
+display(visits.describe())
 ```
 
 ```text
@@ -323,108 +285,121 @@ Data columns (total 3 columns):
  0   age     3 non-null      int64  
  1   temp_c  3 non-null      float64
  2   smoker  3 non-null      bool   
-dtypes: bool(1), float64(1), int64(1)
-memory usage: 87.0 bytes
-             age     temp_c
-count   3.000000   3.000000
-mean   44.333333  37.366667
-std    12.342339   0.665833
-min    34.000000  36.800000
-25%    37.500000  37.000000
-50%    41.000000  37.200000
-75%    49.500000  37.650000
-max    58.000000  38.100000
+...
 ```
 
-`info()` shows that every column has 3 non-null values, so nothing is missing; the memory figure varies with installed packages. `describe()` summarizes only the numeric columns, so `smoker` is left out. Its `std` row is the sample standard deviation, which divides by n − 1 (`0.665833` for `temp_c`); NumPy's `np.std(visits["temp_c"])` divides by n and gives about `0.544` unless you pass `ddof=1` (Lecture 03).
+|  | age | temp_c |
+| --- | --- | --- |
+| count | 3.000000 | 3.000000 |
+| mean | 44.333333 | 37.366667 |
+| ... | ... | ... |
+| max | 58.000000 | 38.100000 |
 
 ## Selecting Columns
 
-Most questions need only a few columns: "what were the temperatures?" rather than the whole table. Brackets select columns by label. One label gives a Series; a list of labels (double brackets) gives a DataFrame, even when the list holds one name.
-
 ### Reference Card: Column selection
 
-| Expression | Arguments | Output |
-| --- | --- | --- |
-| `df["column_name"]` | One label | `Series` |
-| `df[["col1", "col2"]]` | List of labels | `DataFrame` |
-| `df.column_name` | Identifier that does not conflict with an attribute | `Series`; fails on names with spaces or names shared with a DataFrame method, so prefer brackets |
-| `df.select_dtypes(include=["number"])` | Dtype selector | Matching-column `DataFrame` |
+| Expression | Output |
+| --- | --- |
+| `df["col"]` | One column, as a `Series` |
+| `df[["col"]]` | One column, as a one-column `DataFrame` |
+| `df[["col1", "col2"]]` | Several columns, as a `DataFrame` |
+| `df.col` | A `Series`; fails on names with spaces or names shared with a method, so prefer brackets |
+| `df.select_dtypes(include=["number"])` | Only the numeric columns, as a `DataFrame` |
 
-### Code Snippet: Select Series and DataFrames
+### Code Snippet: One column or several
 
 ```python
-temps = visits["temp_c"]          # one label -> Series
-print(type(temps))
-temp_table = visits[["temp_c"]]   # a list of one label -> DataFrame
-print(type(temp_table))
-print(visits[["age", "temp_c"]])
+display(visits["temp_c"])
+display(visits[["temp_c"]])
+display(visits[["age", "temp_c"]])
 ```
 
-```text
-<class 'pandas.Series'>
-<class 'pandas.DataFrame'>
-            age  temp_c
-patient_id             
-P001         34    36.8
-P002         58    38.1
-P003         41    37.2
-```
+| patient_id | temp_c |
+| --- | --- |
+| P001 | 36.8 |
+| P002 | 38.1 |
+| P003 | 37.2 |
 
-_Think of column selection like picking your team for dodgeball: sometimes you want just your star player (single column), and sometimes you want your entire A-team (multiple columns)._
+| patient_id | temp_c |
+| --- | --- |
+| P001 | 36.8 |
+| P002 | 38.1 |
+| P003 | 37.2 |
+
+| patient_id | age | temp_c |
+| --- | --- | --- |
+| P001 | 34 | 36.8 |
+| P002 | 58 | 38.1 |
+| P003 | 41 | 37.2 |
+
+<callout icon="⚠️" color="yellow_bg">
+	## Several columns need two pairs of brackets
+	`visits["age", "temp_c"]` raises `KeyError: ('age', 'temp_c')`: pandas looks for one column named by that pair.
+</callout>
 
 ## Selecting with `.loc` and `.iloc`
 
-Brackets pick columns. To pick rows, or rows and columns together, use `.loc` or `.iloc`. In Lecture 03 you selected from a 2D array with `arr[row, col]` positions; `.iloc` works the same way, while `.loc` uses the labels pandas adds.
+- **`.loc`** selects rows and columns by **l**abel: `df.loc[row_label, column_label]`.
+- **`.iloc`** selects by **i**nteger position, like `arr[row, col]` on a 2D NumPy array (Lecture 03).
 
-| Selector | Uses | Same cell | Slice ending |
-| --- | --- | --- | --- |
-| `.loc` | Row and column labels | `visits.loc["P002", "temp_c"]` → `38.1` | `visits.loc["P001":"P002"]` includes `P002` |
-| `.iloc` | Integer positions | `visits.iloc[1, 1]` → `38.1` | `visits.iloc[0:2]` stops before position `2` |
+| Selector | Same cell | Slice ending |
+| --- | --- | --- |
+| `.loc` | `visits.loc["P002", "temp_c"]` → `38.1` | `visits.loc["P001":"P002"]` includes `P002` |
+| `.iloc` | `visits.iloc[1, 1]` → `38.1` | `visits.iloc[0:2]` stops before position `2` |
 
 ### Reference Card: Selection by label and position
 
-- `df.loc[row_label, column_label]`: One value, by labels.
-- `df.loc["P001":"P002", ["age", "temp_c"]]`: A label slice (includes the end label) and a list of columns; returns a `DataFrame`.
 - `df.loc["P002"]`: One whole row, as a `Series`.
+- `df.loc["P001":"P002", ["age", "temp_c"]]`: Rows and columns together; a list picks several columns.
 - `df.loc[:, ["age"]]`: `:` means every row.
-- `df.iloc[1, 1]`, `df.iloc[0:2, 0:2]`: The same selections by integer position; slices stop before the end position.
-- `df1.equals(df2)`: `True` when two tables (or two Series) have the same labels, values, and dtypes; a quick check that two selections match.
 
 ### Code Snippet: Compare label and position selection
 
 ```python
-print(visits.loc["P002", "temp_c"])                     # 38.1 (row label, column label)
-print(visits.iloc[1, 1])                                # 38.1 (row position 1, column position 1)
-by_label = visits.loc["P001":"P002", ["age", "temp_c"]]  # label slice includes P002
-by_position = visits.iloc[0:2, 0:2]                     # position slice stops before 2
-print(by_label)
+by_label = visits.loc["P001":"P002", ["age", "temp_c"]]
+by_position = visits.iloc[0:2, 0:2]
+display(by_label)
 print(by_label.equals(by_position))
 ```
 
+| patient_id | age | temp_c |
+| --- | --- | --- |
+| P001 | 34 | 36.8 |
+| P002 | 58 | 38.1 |
+
 ```text
-38.1
-38.1
-            age  temp_c
-patient_id             
-P001         34    36.8
-P002         58    38.1
 True
 ```
 
-Both slices hold the same two rows, P001 and P002, so `.equals()` returns `True`.
-
 ### Common Mistakes: Labels vs Positions
 
-- **`.loc`** = **L**abels; **`.iloc`** = **i**nteger **loc**ations (0, 1, 2, ... like list positions).
 - `visits.loc[1, "age"]` raises `KeyError: 1`: no row is _labeled_ 1.
 - `visits.iloc["P002", 0]` raises `ValueError`: `.iloc` accepts positions only.
 
-_Indexing in pandas is like a choose-your-own-adventure book: there are multiple ways to reach the same destination, and sometimes you end up in a completely different story than you intended._
+<callout icon="⚠️" color="yellow_bg">
+	## `df[i][j]` is not selection with `pandas`!
+	`[]` means labels in pandas: columns on a DataFrame, index labels on a Series. Use `.iloc[i, j]` for positions.
+</callout>
+
+### Square Brackets Look Up Labels
+
+On a default `0, 1, 2, ...` index, labels and positions coincide, so `[]` seems to work like a NumPy array until filtering or sorting changes the labels. `plain` holds the same patients with the default index (row labels `0`, `1`, `2`):
+
+| Code | Result | Why |
+| --- | --- | --- |
+| `visits[0]` | `KeyError: 0` | No column is named `0` |
+| `visits["temp_c"][1]` | `KeyError: 1` | No row is labeled `1` |
+| `visits["temp_c"]["P002"]` | `38.1` | `P002` is a label |
+| `plain["age"][1]` | `58` | Label `1` is also position `1` |
+| `plain[plain["temp_c"] > 37]["age"][0]` | `KeyError: 0` | The filter kept labels `1` and `2` |
+| `plain[plain["temp_c"] > 37]["age"].iloc[0]` | `58` | `.iloc` counts positions |
 
 ## Filtering Rows with a Boolean Mask
 
-In Lecture 03, `arr[arr > 5]` kept the NumPy values that passed a test. pandas works the same way, with one improvement: comparing a column returns a Boolean Series that carries the table's index, so each `True` or `False` stays attached to its patient. A **mask** is that Boolean Series. Give it a descriptive name, then pass it to `.loc` with the columns you want.
+> _I warned you these would come back…_
+
+Review: A **mask** is a Boolean Series from a comparison, such as `visits["temp_c"] >= 38.0`. It carries the table's index, so each `True` stays attached to its patient.
 
 ```text
 temp_c >= 38.0     has_fever      visits.loc[has_fever, ["age", "temp_c"]]
@@ -435,38 +410,137 @@ P003  37.2   ->    P003  False
 
 ### Reference Card: Boolean masks
 
-- `mask = df["col"] >= value`: Test every row; returns a Boolean `Series` with the same index.
-- `df.loc[mask]`: Keep the rows where `mask` is `True`.
-- `df.loc[mask, ["col1", "col2"]]`: Keep matching rows and only the listed columns.
-- `(df["a"] > 1) & (df["b"] < 5)`, `(...) | (...)`: Combine tests with AND / OR; parentheses are required, as in Lecture 03.
+- `mask = df["col"] >= value`: Test every row; a Boolean `Series` with the same index.
+- `df.loc[mask]`, `df.loc[mask, ["col1", "col2"]]`: Keep the matching rows, optionally only some columns.
+- `(df["a"] > 1) & (df["b"] < 5)`, `(...) | (...)`: AND / OR; parentheses are required, as in Lecture 03.
 - `mask.sum()`: Count the `True` rows.
 
 ### Code Snippet: Keep patients with a fever
 
 ```python
 has_fever = visits["temp_c"] >= 38.0
-print(has_fever)
-print(visits.loc[has_fever, ["age", "temp_c"]])
+display(has_fever)
+display(visits.loc[has_fever, ["age", "temp_c"]])
 ```
 
+| patient_id | temp_c |
+| --- | --- |
+| P001 | False |
+| P002 | True |
+| P003 | False |
+
+| patient_id | age | temp_c |
+| --- | --- | --- |
+| P002 | 58 | 38.1 |
+
+![xkcd 2618: Selection Bias. The rows a filter keeps decide the answer, so name each mask and count what it kept](media/xkcd_2618.png)
+
+# Summarizing Data
+
+- A **reduction** turns many values into one, such as a mean. pandas skips missing values.
+- On a DataFrame, a reduction runs down each column by default (`axis="index"`); `axis="columns"` runs across each row.
+
+`bp` holds systolic pressure (mmHg) at three visits:
+
 ```text
+            baseline  week_4  week_8   mean(axis="columns")
 patient_id
-P001    False
-P002     True
-P003    False
-Name: temp_c, dtype: bool
-            age  temp_c
-patient_id             
-P002         58    38.1
+P001             128     124     121   ->  124.33
+P002             142     136     138   ->  138.67
+P003             150     138     131   ->  139.67
+mean()         140.0  132.67   130.0
 ```
+
+## Descriptive Statistics
+
+### Reference Card: Reductions
+
+| Task | Call | Result |
+| --- | --- | --- |
+| Summarize each column | `df.mean()`, `.median()`, `.sum()`, `.min()`, `.max()`, `.std()`, `.count()` | One value per column, as a `Series`; `count()` counts non-missing values |
+| Summarize each row | `df.mean(axis="columns")` | One value per row |
+| Find where the extreme is | `s.idxmax()`, `s.idxmin()` | Label of the largest or smallest value |
+| Running total | `s.cumsum()` | Each value plus all the earlier ones |
+| Correlation | `df["a"].corr(df["b"])`, `df.corr()` | Pearson's _r_, from -1 to 1; `df.corr()` gives every pair |
+| Summary statistics, numeric columns | `df.describe()` | Count, mean, std, min, quartiles, and max per numeric column; text columns left out |
+| Summary statistics, text columns | `df.describe()` on text-only columns, or `df.describe(include="all")` | Count, unique, top (most common value), and freq |
+
+### Code Snippet: Down the columns, across the rows
+
+```python
+display(bp.mean())
+display(bp.mean(axis="columns"))
+print(bp["week_8"].idxmin())
+print(bp["baseline"].corr(bp["week_8"]))
+```
+
+|  | value |
+| --- | --- |
+| baseline | 140.000000 |
+| week_4 | 132.666667 |
+| week_8 | 130.000000 |
+
+| patient_id | value |
+| --- | --- |
+| P001 | 124.333333 |
+| P002 | 138.666667 |
+| P003 | 139.666667 |
+
+```text
+P001
+0.7042105548226619
+```
+
+## Counting Values
+
+> _But wait! My data is categorical!_
+
+`clinic` is a Series of five patients' clinics, `P001` to `P005`: North, South, North, East, North.
+
+### Reference Card: Distinct values and membership
+
+| Task | Call | Result |
+| --- | --- | --- |
+| Count each value | `s.value_counts()` | Counts, most common first; `dropna=False` adds a `NaN` count |
+| Find repeated IDs | `df["patient_id"].value_counts().head()` | A count above 1 is a repeat |
+| List distinct values | `s.unique()` | Array in order of first appearance |
+| Count distinct values | `s.nunique()` | One number, not counting missing |
+| Test membership | `s.isin(["South", "East"])` | Boolean mask; one mask instead of two joined with `\|` |
+
+### Code Snippet: Count clinics and test membership
+
+```python
+display(clinic.value_counts())
+print(clinic.nunique())
+display(clinic.isin(["South", "East"]))
+```
+
+| clinic | count |
+| --- | --- |
+| North | 3 |
+| South | 1 |
+| East | 1 |
+
+```text
+3
+```
+
+|  | clinic |
+| --- | --- |
+| P001 | False |
+| P002 | True |
+| P003 | False |
+| P004 | True |
+| P005 | False |
 
 # LIVE DEMO!
 
+[Open Demo 2 in Colab](https://colab.research.google.com/github/christopherseaman/datasci_217/blob/main/04/demo/demo2_pandas_basics.ipynb)
+
 # Deriving and Ordering Data
 
-Selecting answers "which rows and columns?" Two more questions come up in every analysis: "what number do I actually need?" and "which rows matter most?" A clinic export rarely stores the value you want to report. It stores a temperature in Celsius when the chart is in Fahrenheit, or a baseline and a follow-up when the interesting number is the change between them. You compute that value once, for the whole table, and pandas keeps each result attached to its patient.
-
-Then you put the interesting rows on top. In Lecture 03, `np.sort()` reordered bare values. A table has to move whole rows, so each patient's other columns travel with the value you sorted on.
+- A **derived column** is computed from columns the table already has, such as Fahrenheit from Celsius.
+- **Sorting** reorders whole rows by a column, so each patient's other values come along.
 
 ```text
 visits                 add temp_f                    sort by temp_f (highest first)
@@ -476,16 +550,14 @@ P002  58    38.1      P002   58    38.1  100.58     P003   41    37.2   98.96
 P003  41    37.2      P003   41    37.2   98.96     P001   34    36.8   98.24
 ```
 
-## Adding Columns
+## Adding and Dropping Columns and Rows
 
-A **derived column** is computed from columns you already have: a temperature in Fahrenheit, a change from baseline, a body-mass index. Assign to a new column name with brackets. As with NumPy's vectorized arithmetic in Lecture 03, pandas computes the whole column at once with no loop, matching rows by index label.
+### Reference Card: Changing columns and rows
 
-### Reference Card: Adding, updating, and removing columns
-
-- `df["new"] = expression`: Add a column, or replace it if the name exists; values line up by index label.
-- `df.drop(columns=["col1", "col2"])`: Return a new DataFrame without the named columns; `columns=` names what to leave out, as one label or a list, and the original table keeps every column.
-- `df.loc[mask, "col"] = value`: Update only the rows where `mask` is `True`, in the original table.
-- `subset = df.loc[mask].copy()`: Make a separate table you intend to modify, and say so explicitly.
+- `df["new"] = expression`: Add or replace a column, computed for every row at once, as with NumPy arrays.
+- `df.loc[mask, "col"] = value`: Update only the rows where `mask` is `True`.
+- `df.drop(columns=["col1"])`, `df.drop(index=["P002"])`: A new DataFrame without those columns or rows; the original keeps them.
+- `subset = df.loc[mask].copy()`: A separate table you intend to change.
 
 ### Code Snippet: Derive and flag
 
@@ -493,40 +565,51 @@ A **derived column** is computed from columns you already have: a temperature in
 visits["temp_f"] = visits["temp_c"] * 9 / 5 + 32
 visits["flag"] = "ok"
 visits.loc[visits["temp_c"] >= 38.0, "flag"] = "fever"
-print(visits)
+display(visits)
 ```
 
-```text
-            age  temp_c  smoker  temp_f   flag
-patient_id                                    
-P001         34    36.8   False   98.24     ok
-P002         58    38.1    True  100.58  fever
-P003         41    37.2   False   98.96     ok
+| patient_id | age | temp_c | smoker | temp_f | flag |
+| --- | --- | --- | --- | --- | --- |
+| P001 | 34 | 36.8 | False | 98.24 | ok |
+| P002 | 58 | 38.1 | True | 100.58 | fever |
+| P003 | 41 | 37.2 | False | 98.96 | ok |
+
+### Code Snippet: Drop a row and two columns
+
+```python
+display(visits.drop(index="P002", columns=["smoker", "flag"]))
 ```
+
+| patient_id | age | temp_c | temp_f |
+| --- | --- | --- | --- |
+| P001 | 34 | 36.8 | 98.24 |
+| P003 | 41 | 37.2 | 98.96 |
 
 ### Common Mistake: Chained Assignment
 
-In Lecture 03, a NumPy slice was a view, so changing the slice changed the original array. pandas 3 uses **Copy-on-Write**: every selection behaves like a separate copy. Two bracket steps in a row therefore change a temporary copy. pandas warns with `ChainedAssignmentError`, and `visits` stays unchanged.
+Two bracket steps in a row change a temporary copy, not `visits`; pandas 3 warns with `ChainedAssignmentError`.
 
 ```python
-visits[visits["temp_c"] >= 38.0]["flag"] = "fever"     # warning; visits is not updated
-visits.loc[visits["temp_c"] >= 38.0, "flag"] = "fever"  # one step: updates visits
+# Wrong: warns, and visits is not updated
+visits[visits["temp_c"] >= 38.0]["flag"] = "fever"
+# Right: one .loc step updates visits
+visits.loc[visits["temp_c"] >= 38.0, "flag"] = "fever"
 ```
 
-To change a separate table, such as the fever patients only, copy it first, as with NumPy arrays in Lecture 03: `fever_visits = visits.loc[has_fever].copy()`.
+## Sorting and Ranking
 
-## Sorting Rows
-
-A sorted table answers "who is highest?" at a glance: which patients had the largest blood-pressure drop, or which readings are most extreme. `sort_values()` reorders whole rows, so each patient's other columns and index label travel with the sorted value.
-
-Sorting returns a **new** DataFrame and leaves the original in its old order; assign the result to a name to keep it. When two rows share a value (a **tie**), their order depends on the order the rows arrived in, which a re-export or an earlier filter can change. Add a unique second key, such as an ID, so the result does not depend on it: a **deterministic sort**.
+- `sort_values()` returns a new DataFrame; assign it to a name to keep it.
+- Rows that share a value (a **tie**) can come out in any order. Add a unique second key, such as an ID, for a **deterministic sort**.
+- A **rank** numbers each value by its place in that order without moving any rows.
 
 ### Reference Card: Sorting
 
-- `df.sort_values("col")`: Sort rows by one column, smallest first; returns a new DataFrame.
+- `df.sort_values("col")`: Smallest first.
 - `df.sort_values("col", ascending=False)`: Largest first.
-- `df.sort_values(by=["col1", "col2"], ascending=[False, True])`: Sort by `col1` descending, then break ties with `col2` ascending, one direction per key. `by` may also name the row index, such as `"patient_id"` in `visits`.
-- `df.sort_index()`: Sort rows by their index labels.
+- `df.sort_values(by=["col1", "col2"], ascending=[False, True])`: `col1` descending, ties broken by `col2` ascending.
+- `df.sort_values(by=["change", "patient_id"])`: `by` may name the index as well as a column.
+- `s.rank()`: Rank as `float64`, 1 for the smallest; ties share the mean of their places (1.5, 1.5).
+- `s.rank(ascending=False, method="min")`: Largest is 1; ties share the best place (1, 1, 3).
 
 ### Code Snippet: Break a tie with a unique ID
 
@@ -539,32 +622,135 @@ by_pressure = vitals.sort_values(
     by=["systolic", "patient_id"],
     ascending=[False, True],
 )
-print(by_pressure)
+display(by_pressure)
+```
+
+|  | patient_id | systolic |
+| --- | --- | --- |
+| 2 | P002 | 142 |
+| 0 | P003 | 142 |
+| 3 | P004 | 130 |
+| 1 | P001 | 118 |
+
+### Code Snippet: Rank with a tie
+
+```python
+display(vitals["systolic"].rank(ascending=False, method="min"))
+```
+
+|  | systolic |
+| --- | --- |
+| 0 | 1.0 |
+| 1 | 4.0 |
+| 2 | 1.0 |
+| 3 | 3.0 |
+
+# The Index: Row Labels
+
+- The **index** holds one label per row, shown at the left. A table built without one gets a **RangeIndex**: 0, 1, 2, ..., the starting positions.
+- A meaningful index, such as patient IDs, lets `.loc` find a row by ID, and labels stay with their rows through filtering and sorting.
+- Labels need not be unique: a patient with two visits can have two rows with one ID.
+
+```text
+vitals (RangeIndex)        vitals.set_index("patient_id")
+  patient_id  systolic                 systolic
+0       P003       142     patient_id
+1       P001       118     P003             142
+2       P002       142     P001             118
+3       P004       130     P002             142
+                           P004             130
+```
+
+## Everyday Index Tasks
+
+### Reference Card: Working with the index
+
+| Task | Call | Result |
+| --- | --- | --- |
+| Make a column the index | `df.set_index("patient_id")` | New DataFrame; the column becomes the row labels |
+| Turn the index back into a column | `df.reset_index()` | New DataFrame with a fresh RangeIndex |
+| Renumber rows 0, 1, 2, ... | `df.reset_index(drop=True)` | Discards the old labels, such as the gaps a filter leaves |
+| Order rows by label | `df.sort_index()` | New DataFrame sorted by index |
+| Look up by label | `df.loc["P003"]` | One row as a `Series`, or a `DataFrame` when the label repeats |
+
+### Code Snippet: Look up and renumber
+
+```python
+# set_index: look rows up by ID (also lines up arithmetic by ID)
+by_id = vitals.set_index("patient_id")
+print(by_id.loc["P002", "systolic"])
+# a filter keeps the original row labels, leaving gaps
+high = vitals.loc[vitals["systolic"] >= 130]
+display(high)
+# reset_index(drop=True): renumber 0, 1, 2 after filtering or sorting
+display(high.reset_index(drop=True))
+# reset_index(): turn the index back into a column, such as before saving IDs as data
 ```
 
 ```text
-  patient_id  systolic
-2       P002       142
-0       P003       142
-3       P004       130
-1       P001       118
+142
 ```
 
-P002 and P003 tie at 142, and `patient_id` puts P002 first. The index labels (2, 0, 3, 1) show where each row started. `vitals` itself is unchanged.
+|  | patient_id | systolic |
+| --- | --- | --- |
+| 0 | P003 | 142 |
+| 2 | P002 | 142 |
+| 3 | P004 | 130 |
+
+|  | patient_id | systolic |
+| --- | --- | --- |
+| 0 | P003 | 142 |
+| 1 | P002 | 142 |
+| 2 | P004 | 130 |
+
+## Arithmetic and Alignment
+
+- **Alignment**: arithmetic between two Series or DataFrames pairs values by label, not by position; a label on only one side gives `NaN`.
+- **Broadcasting**: a Series combined with a DataFrame is repeated to fit, across every row by default or down every column with `axis="index"`.
+
+### Reference Card: Arithmetic between tables
+
+| Task | Call | Result |
+| --- | --- | --- |
+| Treat a missing label as a value | `a.add(b, fill_value=0)`; also `.sub()`, `.mul()`, `.div()` | A label on one side is combined with `0` instead of becoming `NaN` |
+| Apply one row to every row | `df - df.mean()` | Each column minus its own mean |
+| Apply one column to every column | `df.sub(df["baseline"], axis="index")` | Each row minus its own baseline value |
+
+### Code Snippet: Arithmetic matches labels
+
+```python
+baseline = pd.Series([140, 128], index=["P001", "P002"])
+follow_up = pd.Series([132, 125, 150], index=["P002", "P001", "P003"])
+display(follow_up - baseline)
+```
+
+|  | value |
+| --- | --- |
+| P001 | -15.0 |
+| P002 | 4.0 |
+| P003 | NaN |
+
+### Code Snippet: Change from baseline for every visit
+
+```python
+display(bp.sub(bp["baseline"], axis="index"))
+```
+
+| patient_id | baseline | week_4 | week_8 |
+| --- | --- | --- | --- |
+| P001 | 0 | -4 | -7 |
+| P002 | 0 | -6 | -4 |
+| P003 | 0 | -12 | -19 |
 
 # Data Loading and Storage
 
+- Lecture 03 split a CSV with `cut -d','`; in pandas, `pd.read_csv()` reads the whole file into a DataFrame in one call, guessing each column's dtype.
+- A **CSV file** (comma-separated values) has a **header** line of column names, then one line per record.
+- A relative path such as `"data/visits.csv"` starts from the notebook's working directory (`%pwd`); from the wrong folder, it raises `FileNotFoundError`.
+
 ![xkcd 1906: Making Progress. Hours of work can still end with the same problems, now in a spreadsheet](media/xkcd_1906.png)
 
-A **CSV file** (comma-separated values), the format you split into fields with `cut -d','` in Lecture 03, is plain text: the first line is the **header** with the column names, and each later line is one record. `pd.read_csv()` opens the file, splits every line into columns, and detects each column's type in one call, returning a DataFrame. `df.to_csv()` writes one back out.
-
-A path such as `"data/visits.csv"` is **relative** to the notebook's working directory; check it with `%pwd`. The wrong directory gives `FileNotFoundError: [Errno 2] No such file or directory: 'data/visits.csv'`. `pd.read_csv()` also accepts a web address (URL), which is handy in Colab, where the files on your computer are not available.
-
-## Reading and Writing CSV Files
-
-Health data files mark missing values in many ways: a blank, `NA`, `NULL`, `?`. pandas already treats blanks and common markers such as `NA`, `N/A`, and `NULL` as missing and prints each one as **`NaN`** (_Not a Number_). Anything else is read as ordinary text, and a single `?` turns a whole numeric column into text (`str`). List the extra markers with `na_values` when you read.
-
-_Fun fact: CSV stands for "Comma-Separated Values," but in reality, it's more like "Comma-Separated Values (unless someone used semicolons, or tabs, or pipes, or any other delimiter they felt like using that day)."_
+## Reading and Writing Data Files
 
 `visits.csv`:
 
@@ -577,147 +763,128 @@ P004,,38.4,NULL
 P003,41,37.2,North
 ```
 
-| Read with | `temp_c` dtype | `?` becomes | `NULL` becomes |
-| --- | --- | --- | --- |
-| `pd.read_csv("visits.csv")` | `str` (text) | the text `"?"` | `NaN` (missing) |
-| `pd.read_csv("visits.csv", na_values=["?"])` | `float64` | `NaN` (missing) | `NaN` (missing) |
-
-### Reference Card: CSV and Parquet input and output
+### Reference Card: Reading and writing files
 
 | Task | Call | Key arguments | Result |
 | --- | --- | --- | --- |
-| Read CSV | `pd.read_csv(path)` | `path` may be a file path or URL; `na_values=["?"]` adds missing markers to the defaults (blank, `NA`, `N/A`, `NULL`, ...); `index_col="patient_id"` makes a column the row index; `sep=";"` reads other delimiters | New `DataFrame` |
-| Write CSV | `df.to_csv(path)` | Writes the row index as the first column, headed by `df.index.name` | CSV file; returns `None` |
-| Write CSV | `df.to_csv(path, index=False)` | Leaves the row index out | CSV with only the data columns |
-| Read Parquet | `pd.read_parquet(path)` | Reads a **Parquet** file: a compressed format that stores each column with its dtype, so nothing is re-guessed; needs the `pyarrow` package | New `DataFrame` |
-| Write Parquet | `df.to_parquet(path, index=False)` | `index=False` leaves the row index out, as with `to_csv` | Parquet file |
+| Read CSV | `pd.read_csv(path)` | A file path or a web address (URL) | New `DataFrame` |
+| Write CSV | `df.to_csv(path)` | Writes the index first; `index=False` leaves it out when it is only row numbers | CSV file |
+| Read Parquet | `pd.read_parquet(path)` | Needs `pyarrow`; in another project run `uv add pyarrow==25.0.0` | New `DataFrame`, dtypes restored |
+| Write Parquet | `df.to_parquet(path, index=False)` | `index=False` as with `to_csv` | Parquet file |
+
+_CSV stands for "Comma-Separated Values," unless someone used semicolons, or tabs, or pipes, or any other delimiter they felt like using that day._
+
+<callout icon="⚠️" color="yellow_bg">
+	## The index is saved, but not read back!
+	- `to_csv(filename)` writes the index as the first column
+	- `read_csv(filename, index_col="patient_id")` to read it back
+	- Without `index_col=` the index returns as an ordinary column
+	- `index=False` drops it, IDs included
+</callout>
+
+## Missing-Value Markers
+
+- pandas reads blanks and common markers such as `NA`, `N/A`, and `NULL` as missing, shown as **`NaN`** (_Not a Number_).
+- Any other marker stays text, and one `?` turns a whole numeric column into `str`.
+- A missing value makes a whole-number column `float64`, because `NaN` is a float.
+
+| Read with | `temp_c` dtype | `?` becomes | `NULL` becomes |
+| --- | --- | --- | --- |
+| `pd.read_csv("visits.csv")` | `str` | the text `"?"` | `NaN` |
+| `pd.read_csv("visits.csv", na_values=["?"])` | `float64` | `NaN` | `NaN` |
 
 ### Code Snippet: Read with missing markers
 
 ```python
 visits = pd.read_csv("visits.csv", na_values=["?"])
-print(visits)
-print(visits.dtypes)
+display(visits)
 ```
+
+|  | patient_id | age | temp_c | clinic |
+| --- | --- | --- | --- | --- |
+| 0 | P001 | 34.0 | 36.8 | North |
+| 1 | P002 | 58.0 | NaN | South |
+| 2 | P003 | 41.0 | 37.2 | North |
+| 3 | P004 | NaN | 38.4 | NaN |
+| 4 | P003 | 41.0 | 37.2 | North |
+
+## Common `read_csv` Options
+
+Real exports vary: another delimiter, a units row under the header, extra columns, or a code such as `-999` for "not measured".
+
+### Reference Card: `pd.read_csv()`
+
+| Argument | Purpose | Example |
+| --- | --- | --- |
+| `sep` | Delimiter between fields | `sep=";"`; `sep="\t"` for tabs |
+| `header`, `names` | Which line holds the column names; your own names instead | `header=None, names=["id", "sbp"]` |
+| `usecols` | Read only these columns | `usecols=["patient_id", "glucose"]` |
+| `nrows` | Read only the first `n` records | `nrows=100` previews a large file |
+| `skiprows` | Skip lines by number, counting the header as `0` | `skiprows=[1]` skips a units row |
+| `dtype` | Set a column's dtype instead of guessing | `dtype={"zip": "str"}` keeps leading zeros |
+| `index_col` | Make a column the row index | `index_col="patient_id"` |
+| `na_values` | Extra missing-value markers | `na_values=["?", "-999"]` |
+| `encoding` | Text encoding of the file | `encoding="latin-1"` after a `UnicodeDecodeError` |
+
+### Code Snippet: Read a semicolon file with a units row
+
+`labs.csv`:
 
 ```text
-  patient_id   age  temp_c clinic
-0       P001  34.0    36.8  North
-1       P002  58.0     NaN  South
-2       P003  41.0    37.2  North
-3       P004   NaN    38.4    NaN
-4       P003  41.0    37.2  North
-patient_id        str
-age           float64
-temp_c        float64
-clinic            str
-dtype: object
+patient_id;glucose;hba1c;site
+id;mg/dL;%;text
+P001;98;5.4;North
+P002;-999;6.1;South
+P003;110;5.9;North
+P004;131;7.2;East
 ```
-
-`age` became `float64` because `NaN` is a floating-point value; Lecture 05 shows how to keep whole numbers when values are missing.
-
-### Code Snippet: Keep or drop the index when writing
 
 ```python
-by_patient = pd.read_csv("visits.csv", na_values=["?"], index_col="patient_id")
-by_patient.to_csv("with_index.csv")             # first line: patient_id,age,temp_c,clinic
-by_patient.to_csv("no_index.csv", index=False)  # first line: age,temp_c,clinic
+labs = pd.read_csv(
+    "labs.csv",
+    sep=";",
+    skiprows=[1],
+    usecols=["patient_id", "glucose"],
+    na_values=["-999"],
+    nrows=3,
+)
+display(labs)
 ```
 
-Keep the index when it holds meaningful labels such as patient IDs. Use `index=False` when the index is just the default 0, 1, 2, ... row numbers. Reading the saved file back with `pd.read_csv()`, a **round trip**, confirms that the columns you meant to write are there.
+|  | patient_id | glucose |
+| --- | --- | --- |
+| 0 | P001 | 98.0 |
+| 1 | P002 | NaN |
+| 2 | P003 | 110.0 |
 
-### Code Snippet: Save a table as Parquet
+## Preserving Types with Parquet
 
-Use Parquet for a table you or a later notebook will load back into pandas: each column's dtype and missing values come back as saved, with no `na_values` or re-guessing, while CSV stays the choice for files people open in a spreadsheet. It needs the `pyarrow` package, installed once with `uv pip install pyarrow` in the activated environment.
+- CSV stores text, so every read guesses each column's dtype again; **Parquet** stores each column with its dtype and missing values.
+- Use Parquet when another Python analysis needs the same table back; use CSV for spreadsheets and other tools.
+- A **round trip**, reading a saved file back, confirms it holds what you meant to write.
+
+### Code Snippet: Parquet round trip
 
 ```python
 visits.to_parquet("visits.parquet", index=False)
-print(pd.read_parquet("visits.parquet").dtypes)  # the same dtypes as visits
+back = pd.read_parquet("visits.parquet")
+display(back.dtypes)
+print(back.equals(visits))
 ```
+
+|  | value |
+| --- | --- |
+| patient_id | str |
+| age | float64 |
+| temp_c | float64 |
+| clinic | str |
 
 ```text
-patient_id        str
-age           float64
-temp_c        float64
-clinic            str
-dtype: object
+True
 ```
 
-_Pro tip: If you're ever stuck with a weird file format, remember: "There's a pandas function for that!"_ pandas has matching readers and writers for other formats, such as `pd.read_excel()` and `pd.read_json()`; see [Extended I/O and Performance](BONUS.md#extended-io-and-performance).
-
-## Showing a Table: `display()` vs `print()`
-
-`print()` shows plain text in scripts and notebooks alike. In a notebook, `display()` renders a DataFrame as a formatted table, like the one in the JupyterLab screenshot, which is easier to scan when you are looking over a table you just loaded; a Series still shows as plain text. As in the `%pwd` example, a cell shows only its last line's value automatically; anything earlier needs `print()` or `display()`.
-
-_Think of `print()` as the reliable Honda Civic that works almost anywhere, while `display()` is the sports car: prettier, but happiest in Jupyter._
-
-### Code Snippet: Choose notebook output
-
-```python
-print(visits)    # Plain text, works everywhere
-display(visits)  # Formatted table in Jupyter
-len(visits)      # Last line: shown automatically as 5
-```
-
-## Inspecting a Loaded Table
-
-Before analyzing a new clinic export, answer the questions below. Each check is one line, and its output tells you what Lecture 05's cleaning tools will need to fix.
-
-### Reference Card: First-look inspection
-
-| Question | Call | Typical output |
-| --- | --- | --- |
-| Size, types, typical values? | `df.shape`, `df.info()`, `df.describe()` | `(rows, columns)`; non-null counts and dtypes; numeric summary (DataFrame card above) |
-| What is missing? | `df.isna().sum()` | Missing count per column |
-| Which categories? | `df["col"].value_counts()` | Count per value, most common first; `dropna=False` also counts missing |
-| Distinct values? | `df["col"].unique()` / `df["col"].nunique()` | The distinct values, including missing, such as `['North', 'South', nan]` / how many, excluding missing: `2` |
-| Repeated records? | `df.duplicated().sum()` | Rows identical to an earlier row; `df.duplicated()` alone is a Boolean mask |
-| Typical value of one column? | `df["col"].mean()`, `.median()`, `.min()`, `.max()` | One number; missing values are skipped |
-| Which row holds the extreme? | `df["col"].idxmax()` / `df["col"].idxmin()` | Index label of the largest / smallest value (the first one if tied) |
-| Mean of every numeric column? | `df.mean(numeric_only=True)` | `Series` with one mean per numeric column; text columns are left out |
-
-### Code Snippet: Count gaps, categories, and repeats
-
-```python
-print(visits.isna().sum())
-print(visits["clinic"].value_counts(dropna=False))
-print(visits.duplicated().sum())
-```
-
-```text
-patient_id    0
-age           1
-temp_c        1
-clinic        1
-dtype: int64
-clinic
-North    3
-South    1
-NaN      1
-Name: count, dtype: int64
-1
-```
-
-The row labeled 4 repeats row 2: the same visit entered twice. Because `visits.duplicated()` is a mask, `visits.loc[visits.duplicated()]` shows the repeated row.
-
-### Code Snippet: Summarize one column
-
-```python
-print(visits["temp_c"].mean())    # P002's missing temperature is skipped
-print(visits["temp_c"].max())
-print(visits["temp_c"].idxmax())  # index label of the highest temperature
-print(visits.mean(numeric_only=True))
-```
-
-```text
-37.400000000000006
-38.4
-3
-age       43.5
-temp_c    37.4
-dtype: float64
-```
-
-pandas skips missing values in summaries, so the mean averages the four recorded temperatures; NumPy's `.mean()` returns `nan` when any value is missing. The trailing `...006` is binary rounding: most decimals cannot be stored exactly, so format the value with `:.1f` (Lecture 02) when you report it. The duplicated P003 visit is counted twice here, one more reason to find repeats before summarizing.
+![xkcd 927: Standards. Each file format was meant to be the one everyone uses, which is why pandas has a reader for so many of them](media/xkcd_927.png)
 
 # LIVE DEMO!
+
+[Open Demo 3 in Colab](https://colab.research.google.com/github/christopherseaman/datasci_217/blob/main/04/demo/demo3_data_io.ipynb)

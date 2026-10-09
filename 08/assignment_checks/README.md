@@ -9,7 +9,7 @@ push from `christopherseaman/datasci_217@main:08/assignment_checks/` (its
 grades with them.
 
 The handout ships a byte-identical copy of every file the workflow lists in
-`CHECKS_FILES`, so `python check_assignment.py` in a student's repository
+`CHECKS_FILES`, so `python3 check_assignment.py` in a student's repository
 prints each check's result, what to fix, and the score, exactly as GitHub will.
 The listed files:
 
@@ -32,17 +32,17 @@ student's repository and says so in the log.
 
 Correct a check here and copy the changed file over its twin in
 `08/assignment/`; the self-test fails while the two differ. Every fork gets the
-correction on its next push. A student's local copy changes only when the
-handout is republished (`scripts/publish_assignment.sh 08 ...`) and the student
-syncs the fork, so until then the local run can lag the GitHub run, and the
-GitHub run counts.
+correction on its next push. The local `check_assignment.py` downloads the
+current `_value_checks.py` and `grading.py` from main, falling back to the
+bundled copy offline or with `--local-checks` / `DS217_LOCAL_CHECKS=1`, so local
+and GitHub runs agree.
 
 `_value_checks.py` holds its own copy of the visit log (`VISITS`) and the
 reporting order (`CLINIC_ORDER`); change them together with
 `08/assignment/data/clinic_visits.csv` and the notebook. A change to the check
 list or to `POINTS` belongs in `_value_checks.py` and `grading.py` at once, in
-the same order: `grading.py` zips the checks against `POINTS` with
-`strict=True`. Keep the README's checkpoints and completion contract in
+the same order: `grading.py` pairs the checks with `POINTS` and raises when
+their counts differ. Keep the README's checkpoints and completion contract in
 agreement with the checks; the self-test compares them.
 
 ## Checking the checks

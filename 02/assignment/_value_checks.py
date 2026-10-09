@@ -110,6 +110,8 @@ CACHE_FILE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 LABEL_LINES = ("cutoff", "reason")
+# What separates IDs written together on one line: `['P002', 'P006']`, `{'P002', 'P006'}`, or `P002, P006`.
+ID_SEPARATORS = re.compile(r"[\s,;\[\]{}()'\"]+")
 
 
 # A saved line is shown in feedback up to this many characters, and a list of patient IDs up to this many IDs.
@@ -217,11 +219,13 @@ def _read_artifact(root: Path, relative: Path, save: str) -> str:
         raise AssertionError(f"{name} cannot be opened ({error.strerror or 'unreadable'}). {save}") from None
 
 
-def summarize_encounters(text: str) -> SuppliedEncounters:
+def summarize_encounters(text: str, check_range: bool = True) -> SuppliedEncounters:
     """Apply the assignment's usable-row rule to an encounter file's text.
 
     Every line after the header is a data row, as `splitlines()` reads it, so the
     blank line inside the export is one, the way the student's own loop reads it.
+    `check_range=False` leaves out the 60-250 mmHg rule, the way a report that
+    forgot it counts.
     """
     usable: list[tuple[str, int]] = []
     all_ids: set[str] = set()
@@ -236,12 +240,20 @@ def summarize_encounters(text: str) -> SuppliedEncounters:
             systolic = int(fields[2])
         except ValueError:
             continue
-        if SYSTOLIC_MIN <= systolic <= SYSTOLIC_MAX:
+        if not check_range or SYSTOLIC_MIN <= systolic <= SYSTOLIC_MAX:
             usable.append((fields[0].strip(), systolic))
     return SuppliedEncounters(usable=tuple(usable), data_rows=len(rows), all_ids=frozenset(all_ids))
 
 
 ENCOUNTERS = summarize_encounters(SUPPLIED_ENCOUNTERS)
+# Every readable row, as a report that left out the range rule counts it. That
+# mistake is charged once, in the usable and skipped counts; the later values
+# are judged against the student's own rows.
+UNFILTERED = summarize_encounters(SUPPLIED_ENCOUNTERS, check_range=False)
+RANGE_HINT = (
+    f" Your count matches every row with a readable reading, so the {SYSTOLIC_MIN}-{SYSTOLIC_MAX} mmHg range rule "
+    "is likely missing; the values that follow are also accepted when they match those rows."
+)
 
 
 def _labelled_values(text: str) -> dict[str, str]:
@@ -348,6 +360,20 @@ def _check_count(root: Path, label: str, expected: int, found: str, hint: str, a
     raise AssertionError(_wrong(root, label, found, hint))
 
 
+def _unfiltered(root: Path) -> bool:
+    """Whether the report's usable count is every readable row, the range rule left out."""
+    try:
+        reported, _ = _report_number(root, "usable encounters")
+    except AssertionError:
+        return False
+    return abs(reported - len(UNFILTERED.usable)) < COUNT_TOLERANCE
+
+
+def _also(root: Path, value):
+    """The value from every readable row, accepted only when the student's own usable count left out the range rule."""
+    return value(UNFILTERED) if _unfiltered(root) else None
+
+
 # --------------------------------------------------------------------------
 # Checks
 # --------------------------------------------------------------------------
@@ -443,21 +469,12 @@ def check_gitignore_cache(root: Path) -> None:
 def check_report_format(root: Path) -> None:
     text = _report_text(root)
     values = _labelled_values(text)
-    missing = [label for label in REPORT_LABELS if label not in values]
-    if not missing:
+    # Missing or unreadable individual lines are charged by their value checks.
+    if any(_parse_number(values[label]) is not None for label in REPORT_LABELS if label in values):
         return
-    closest = list(dict.fromkeys(
-        f"`{_shown(line)}`" for line in (_closest(text, label, REPORT_LABELS) for label in missing) if line
-    ))
-    found = ""
-    if closest:
-        found = (f"; the closest line reads {closest[0]}" if len(closest) == 1
-                 else f"; the closest lines read {_join(closest, limit=2)}")
     raise AssertionError(
-        f"{REPORT_FILE.as_posix()} has no "
-        + _join(f"`{label.capitalize()}:`" for label in missing)
-        + f" line{'s' if len(missing) > 1 else ''}{found}. Task 2.3 asks for six lines, each the label as "
-        "shown, a colon, and the number, as in `Patients seen: <number>`. " + REPORT_FIX
+        f"{REPORT_FILE.as_posix()} has no readable summary line. Task 2.3 asks for a label, a colon, "
+        "and the number, as in `Patients seen: <number>`. " + REPORT_FIX
     )
 
 
@@ -469,19 +486,26 @@ def check_usable_encounters(root: Path) -> None:
         len(encounters.usable),
         f"{DATA_FILE.as_posix()} has {len(encounters.usable)} usable data rows",
         "A usable row (Task 2.1) has exactly three comma-separated fields, a systolic value `int()` can read, "
-        f"and a reading from {SYSTOLIC_MIN} to {SYSTOLIC_MAX} mmHg.",
+        f"and a reading from {SYSTOLIC_MIN} to {SYSTOLIC_MAX} mmHg." + (RANGE_HINT if _unfiltered(root) else ""),
     )
 
 
 def check_skipped_rows(root: Path) -> None:
     encounters = ENCOUNTERS
+    # Leaving out the range rule is charged once, in the usable count: the skipped count that follows
+    # from the student's own usable count passes here.
+    if _unfiltered(root):
+        reported, _ = _report_number(root, "skipped rows")
+        if any(abs(reported - value) < COUNT_TOLERANCE for value in (UNFILTERED.skipped_rows, UNFILTERED.skipped_rows + 1)):
+            return
     _check_count(
         root,
         "skipped rows",
         encounters.skipped_rows,
         f"{DATA_FILE.as_posix()} has {encounters.skipped_rows} data rows to skip",
         "Every data row that is not usable is skipped (Task 2.1): the header is not a data row, but the blank "
-        "line inside the export is one, the way Demo 3 reports it.",
+        "line inside the export is one, the way Demo 3 reports it."
+        + (f" Readings outside {SYSTOLIC_MIN}-{SYSTOLIC_MAX} mmHg are skipped too." if _unfiltered(root) else ""),
         # An editor can append a blank line to the export on save; counting it is not a mistake.
         also=encounters.skipped_rows + 1,
     )
@@ -496,6 +520,7 @@ def check_distinct_patients(root: Path) -> None:
         f"the usable encounters name {len(encounters.patients)} different patients",
         "Count each patient ID once across the usable encounters only (Task 2.3): some patients visited twice, "
         "and a patient whose only row was skipped was not seen.",
+        also=_also(root, lambda rows: len(rows.patients)),
     )
 
 
@@ -505,7 +530,8 @@ def check_mean_systolic(root: Path) -> None:
     expected = sum(encounters.readings) / len(encounters.readings)
     # Compared at the precision the student wrote, so rounding never decides a grade.
     tolerance = max(MEAN_TOLERANCE, 0.5 * 10**-decimals)
-    if abs(reported - expected) <= tolerance:
+    loose = _also(root, lambda rows: sum(rows.readings) / len(rows.readings))
+    if any(abs(reported - value) <= tolerance for value in (expected, loose) if value is not None):
         return
     raise AssertionError(
         _wrong(
@@ -526,6 +552,7 @@ def check_highest_systolic(root: Path) -> None:
         max(encounters.readings),
         f"the largest usable reading is {max(encounters.readings)} mmHg",
         "Take the largest usable reading, not the largest number in the file (Task 2.3).",
+        also=_also(root, lambda rows: max(rows.readings)),
     )
 
 
@@ -537,6 +564,7 @@ def check_lowest_systolic(root: Path) -> None:
         min(encounters.readings),
         f"the smallest usable reading is {min(encounters.readings)} mmHg",
         f"Take the smallest usable reading, so nothing below {SYSTOLIC_MIN} mmHg counts (Task 2.3).",
+        also=_also(root, lambda rows: min(rows.readings)),
     )
 
 
@@ -553,9 +581,9 @@ def _listed_patients(root: Path, known: frozenset[str]) -> set[str]:
     """The patient IDs named in the follow-up list, ignoring anything else on the page.
 
     A line counts only when the whole line is one patient ID, allowing a bullet
-    marker and trailing punctuation. That is what the README promises, so a
-    heading or a note that happens to mention a patient cannot change the
-    graded answer.
+    marker and trailing punctuation, or nothing but patient IDs, as `print(ids)`
+    or a comma-separated line writes them. A heading or a note that happens to
+    mention a patient cannot change the graded answer.
     """
     listed: set[str] = set()
     for line in _followup_text(root).splitlines():
@@ -568,7 +596,22 @@ def _listed_patients(root: Path, known: frozenset[str]) -> set[str]:
         entry = entry.lstrip("-*• \t").strip().rstrip(",;")
         if entry.casefold() in known:
             listed.add(entry.casefold())
+            continue
+        ids = [token.casefold() for token in ID_SEPARATORS.split(entry) if token]
+        if ids and all(token in known for token in ids):
+            listed.update(ids)
     return listed
+
+
+def _line_naming_patients(root: Path, known: frozenset[str]) -> str | None:
+    """The first line outside the labels that mentions a known patient ID, for feedback when none was read."""
+    for line in _followup_text(root).splitlines():
+        label, separator, _ = line.strip().partition(":")
+        if separator and _label(label) in LABEL_LINES:
+            continue
+        if any(token.casefold() in known for token in ID_SEPARATORS.split(line)):
+            return line.strip()
+    return None
 
 
 def _declared_cutoff(root: Path) -> float:
@@ -589,16 +632,17 @@ def _declared_cutoff(root: Path) -> float:
         + LIST_FIX,
     )
     cutoff = parsed[0]
-    _assert(
-        CUTOFF_MIN <= cutoff <= CUTOFF_MAX,
-        f"{name} declares a cutoff of {cutoff:g} mmHg, and Task 3.1 asks for one from {CUTOFF_MIN} to "
-        f"{CUTOFF_MAX} mmHg. Choose a cutoff in that range, rerun clinic_report.py, and commit the new list.",
-    )
     return cutoff
 
 
 def check_followup_cutoff(root: Path) -> None:
-    _declared_cutoff(root)
+    cutoff = _declared_cutoff(root)
+    _assert(
+        CUTOFF_MIN <= cutoff <= CUTOFF_MAX,
+        f"{FOLLOWUP_FILE.as_posix()} declares a cutoff of {cutoff:g} mmHg, and Task 3.1 asks for one from "
+        f"{CUTOFF_MIN} to {CUTOFF_MAX} mmHg. Choose a cutoff in that range, rerun clinic_report.py, "
+        "and commit the new list.",
+    )
 
 
 def check_followup_reason(root: Path) -> None:
@@ -631,16 +675,28 @@ def check_followup_patients(root: Path) -> None:
     try:
         cutoff = _declared_cutoff(root)
     except AssertionError as error:
-        # The list is read against the cutoff, so that line has to be right first.
+        # A list needs a readable cutoff to establish which patients it selects.
         raise AssertionError(
-            f"{error} The patient list is checked against your cutoff, so it scores once the `Cutoff:` line passes."
+            f"{error} The patient list is checked against your cutoff, so write a numeric `Cutoff:` line before checking its patients."
         ) from None
     listed = _listed_patients(root, encounters.all_ids)
     expected = encounters.patients_at_or_above(cutoff)
+    if listed == _also(root, lambda rows: rows.patients_at_or_above(cutoff)):
+        return
 
     missing = sorted(patient.upper() for patient in expected - listed)
     extra = sorted(patient.upper() for patient in listed - expected)
     problems = []
+    # An expected ID written on a line the check could not read is not left out; show that line instead.
+    named = {patient for patient in expected - listed if _line_naming_patients(root, frozenset([patient]))}
+    unread = _line_naming_patients(root, frozenset(named) if listed else encounters.all_ids)
+    if unread is not None:
+        which = f" for {_join(sorted(patient.upper() for patient in named), limit=SHOWN_IDS)}" if listed else ""
+        problems.append(
+            f"no line reads as patient IDs alone{which}; the check found `{_shown(unread)}`, and a line must hold only "
+            "patient IDs, as `P018`, `P002, P018`, or a printed list or set does"
+        )
+        missing = sorted(patient.upper() for patient in expected - listed - named)
     if missing:
         problems.append(f"it leaves out {_join(missing, limit=SHOWN_IDS)}")
     if extra:
@@ -651,7 +707,7 @@ def check_followup_patients(root: Path) -> None:
         )
     _assert(
         not problems,
-        f"{FOLLOWUP_FILE.as_posix()} should list the {len(expected)} patients with a usable reading at or above "
+        f"{FOLLOWUP_FILE.as_posix()} should list the {len(expected)} patient{'' if len(expected) == 1 else 's'} with a usable reading at or above "
         f"your cutoff of {cutoff:g} mmHg, but " + "; ".join(problems) + ". List one patient ID per line "
         f"(Task 3.1), rerun clinic_report.py on the supplied {DATA_FILE.as_posix()}, and commit the new list.",
     )

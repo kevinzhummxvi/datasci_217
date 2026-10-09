@@ -18,31 +18,17 @@ jupyter:
 
 # Demo 1: GroupBy Summaries and Pivot Tables
 
-A health system's visit log has one row per clinic visit: 100,000 synthetic visits across five clinics and six departments. This demo answers the questions a clinic manager asks of that log (how long each department's patients wait, how many patients each one sees, how the answers differ by clinic) with `groupby`, named aggregation, two-key groups, pivot tables with totals, and cross-tabulations. Everything here comes from Lecture 08 up to the first demo break, plus Lectures 01 to 07.
+A health system's visit log has one row per clinic visit: 100,000 synthetic visits across five clinics and six departments.
 
-**How to run:** open this notebook in Colab from the lecture page's Colab link, or locally in VS Code with the kernel set to a `.venv` made by `uv venv --seed` and `uv pip install -r requirements.txt` in this folder (Lecture 03). Run the cells from top to bottom; after each step, an **Expect** line says what you should see. Colab does not save your changes back to GitHub; use **File → Save a copy in Drive** to keep them. Tested 2026-09-25 with Python 3.13, pandas 3.0.5, and NumPy 2.3.3; the whole notebook runs in under a minute. The patient IDs and values are synthetic.
+- **Questions answered:** how long each department's patients wait, how many patients each sees, and how that differs by clinic.
+- **Tools:** `groupby`, named aggregation, two-key groups, pivot tables with totals, and cross-tabulations.
 
-## Setup
-
-The first cell installs pandas 3.0.5, the course version. Colab ships an older pandas (2.2). A `.venv` made with `uv venv --seed` includes pip, so the same `%pip` cell works locally too.
-
-```python
-# Setup: install the course's pandas version (Colab and local)
-%pip install -q pandas==3.0.5
-```
-
-**Expect:** `Note: you may need to restart the kernel to use updated packages.`, perhaps after a notice that a newer pip is available; neither needs any action. Locally, with the requirements already installed, the cell changes nothing and you can go on. In Colab, pip may also print a dependency conflict because some preinstalled packages expect pandas 2.2; that is expected, and this demo does not use them. If Colab asks you to restart the session (or says pandas was previously imported), choose **Runtime → Restart session**, then continue with the next cell. You do not need to rerun the install.
+Run the cells from top to bottom; each **Expect** line says what the output should show. Patient IDs and values are synthetic.
 
 ```python
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-print('pandas', pd.__version__)
+# Installs the course's pandas in Colab (uv sync already did locally); if Colab asks, restart and rerun from the top
+%pip install -q --no-warn-conflicts pandas==3.0.5
 ```
-
-**Expect:** `pandas 3.0.5`.
 
 ## Part 1: One Row per Group
 
@@ -53,6 +39,10 @@ The visit log has one row per visit. Every question in this part has an answer w
 The next cell generates the log. You do not need to follow every line: it draws a fixed set of patients, gives each visit a clinic, a department, a wait, a blood pressure, and a satisfaction score, and leaves some surveys blank. The seed makes every run produce the same table.
 
 ```python
+import numpy as np
+import pandas as pd
+from IPython.display import Markdown
+
 rng = np.random.default_rng(42)
 n_visits = 100_000
 n_patients = 30_000
@@ -104,17 +94,17 @@ visits.loc[rng.random(n_visits) < 0.03, "satisfaction"] = np.nan
 print(visits.shape)
 print(f"Distinct patients: {visits['patient_id'].nunique():,}")
 print(f"Visits with no satisfaction survey: {visits['satisfaction'].isna().sum():,}")
-visits.head()
+display(visits.head())
 ```
 
-**Expect:** `(100000, 9)`, 28,929 distinct patients, and 2,984 visits with no survey. The grain is one row per visit, so a patient who came three times has three rows.
+**Expect:** `(100000, 9)`, 28,929 distinct patients, and 2,984 visits with no survey, then five visits with nine columns: IDs, age, clinic, visit type, department, wait, blood pressure, and satisfaction (`NaN` where no survey came back). The grain is one row per visit, so a patient who came three times has three rows.
 
 ### Basic Aggregation
 
 ```python
 # One mean per department: split by department, average wait_min, combine
 dept_wait = visits.groupby("department")["wait_min"].mean()
-print(dept_wait.round(1))
+display(dept_wait.round(1))
 
 # Several summaries per column: a dictionary gives two-level column labels
 dept_stats = visits.groupby("department").agg({
@@ -128,6 +118,9 @@ dept_stats.round(1)
 **Expect:** six rows in alphabetical order. Orthopedics has the longest mean wait (38.1 minutes) and Pediatrics the shortest (14.9). Pediatrics' mean age is 8.5 and its oldest patient is 17, because only children go there. Satisfaction runs opposite to wait: 4.4 in Pediatrics, 3.0 in Orthopedics. The columns have two levels (`wait_min` over `mean`, `median`, ...) because `.agg()` received a dictionary.
 
 ```python
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 # Two views of the same groups (Lecture 07): the means, and the spread behind them
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -162,7 +155,7 @@ dept_report = visits.groupby("department", as_index=False).agg(
     median_wait=("wait_min", "median"),
     longest_wait=("wait_min", "max"),
 )
-print(dept_report.round(1))
+display(dept_report.round(1))
 
 # Checkpoint: name the grain before and after
 print(f"\nInput grain:  one row per visit      -> {len(visits):,} rows")
@@ -223,14 +216,12 @@ daily = pd.DataFrame({
     "visits": [42, 35, 38, 51, 40, 30, 36, 18],
     "no_shows": [3, 5, 2, 6, 4, 2, 1, 2],
 })
-print(daily)
+display(daily)
 
 # Select the numeric columns first: summing "day" would glue the text together
 two_day = daily.groupby(["clinic", "department"])[["visits", "no_shows"]].sum()
-print()
-print(two_day)
-print()
-print(two_day["visits"].unstack())
+display(two_day)
+display(two_day["visits"].unstack())
 ```
 
 **Expect:** 8 input rows become 5 groups, one per observed clinic and department pair. North Cardiology shows `82` visits and `7` no-shows (42 + 40 and 3 + 4). In the grid, North–Dermatology is `NaN`: North logged no Dermatology visits on either day, which is not the same as a count someone recorded as zero.
@@ -241,12 +232,12 @@ print(two_day["visits"].unstack())
 
 ```python
 # .loc on the outer level keeps the inner level as the index
-print("North only:")
-print(two_day.loc["North"])
+display(Markdown("**North only**"))
+display(two_day.loc["North"])
 
 # reset_index() (Lecture 06) turns both levels back into ordinary columns
-print("\nFlattened:")
-print(two_day.reset_index())
+display(Markdown("**Flattened**"))
+display(two_day.reset_index())
 ```
 
 **Expect:** North's two departments, Cardiology and Pediatrics, with `department` as the index; then 5 rows with `clinic` and `department` as ordinary columns and a `0..4` index.
@@ -261,7 +252,7 @@ A pivot table is the two-key grouping from Part 2 in one call: `index` picks the
 wait_pivot = pd.pivot_table(
     visits, values="wait_min", index="department", columns="clinic", aggfunc="mean",
 )
-print(wait_pivot.round(1))
+display(wait_pivot.round(1))
 print("\nSame table as groupby(...).mean().unstack()?", wait_pivot.equals(wait_grid))
 
 # sort=False keeps whichever key turned up first in the rows
@@ -283,10 +274,10 @@ wait_multi = pd.pivot_table(
     visits, values="wait_min", index="department", columns="clinic",
     aggfunc=["count", "mean"],
 )
-print("=== Visits behind each cell ===")
-print(wait_multi["count"])
-print("\n=== Mean wait in each cell ===")
-print(wait_multi["mean"].round(1))
+display(Markdown("**Visits behind each cell**"))
+display(wait_multi["count"])
+display(Markdown("**Mean wait in each cell**"))
+display(wait_multi["mean"].round(1))
 # .sum() adds up each clinic's column; the second .sum() adds those totals
 print("\nTotal visits counted:", wait_multi["count"].sum().sum())
 ```
@@ -301,7 +292,7 @@ wait_totals = pd.pivot_table(
     visits, values="wait_min", index="department", columns="clinic",
     aggfunc="sum", margins=True, margins_name="Total",
 )
-print(wait_totals)
+display(wait_totals)
 
 # Checkpoint: the corner cell is every minute of waiting in the log
 print(f"\nCorner cell:     {wait_totals.loc['Total', 'Total']:,.0f}")
@@ -321,13 +312,13 @@ nurses = pd.DataFrame({
 })
 
 raw = pd.pivot_table(nurses, values="nurses", index="department", columns="clinic", aggfunc="sum")
-print("=== The absent combination shows as NaN ===")
-print(raw)
+display(Markdown("**The absent combination shows as NaN**"))
+display(raw)
 
 filled = pd.pivot_table(nurses, values="nurses", index="department", columns="clinic",
                         aggfunc="sum", fill_value=0)
-print("\n=== fill_value=0: Dermatology really has no nurses in the South ===")
-print(filled)
+display(Markdown("**fill_value=0: Dermatology really has no nurses in the South**"))
+display(filled)
 ```
 
 **Expect:** Dermatology–South is `NaN` in the first table and `0` in the second, and the other cells are unchanged. For a count of nurses, zero is the true answer, so `fill_value=0` is right here. It would be wrong for a mean wait: filling an empty cell with 0 would report a zero-minute wait that never happened.
@@ -346,14 +337,14 @@ plt.tight_layout()
 plt.show()
 ```
 
-**Expect:** horizontal bands of color: Orthopedics darkest, Pediatrics palest, and each row nearly one color across the clinics. A heatmap makes that pattern obvious in a way 30 printed numbers do not.
+**Expect:** horizontal bands of color: Orthopedics darkest, Pediatrics palest, and each row nearly one color across the clinics. A heatmap makes that pattern obvious in a way a table of 30 numbers does not.
 
 ### Back to Long Form
 
 ```python
 # stack() moves the columns back into the index, undoing unstack()
 long_form = wait_pivot.stack()
-print(long_form.head(6).round(1))
+display(long_form.head(6).round(1))
 print("\nRows in long form:", len(long_form))
 print("Round trip back to the grid?", long_form.unstack().equals(wait_pivot))
 ```
@@ -368,7 +359,7 @@ print("Round trip back to the grid?", long_form.unstack().equals(wait_pivot))
 
 ```python
 visit_counts = pd.crosstab(visits["department"], visits["clinic"], margins=True)
-print(visit_counts)
+display(visit_counts)
 print("\nGrand total:", visit_counts.loc["All", "All"])
 ```
 
@@ -380,7 +371,7 @@ print("\nGrand total:", visit_counts.loc["All", "All"])
 # values= plus aggfunc= turns crosstab into a pivot table
 mean_wait = pd.crosstab(visits["department"], visits["clinic"],
                         values=visits["wait_min"], aggfunc="mean")
-print(mean_wait.round(1))
+display(mean_wait.round(1))
 print("\nSame numbers as the pivot table?", mean_wait.round(6).equals(wait_pivot.round(6)))
 ```
 
@@ -394,7 +385,7 @@ visits["age_band"] = pd.cut(
     visits["age"], bins=[-1, 17, 39, 64, 120], labels=["0-17", "18-39", "40-64", "65+"],
 )
 band_counts = pd.crosstab([visits["department"], visits["age_band"]], visits["clinic"])
-print(band_counts)
+display(band_counts)
 print("\nRows in the table:", len(band_counts))
 ```
 

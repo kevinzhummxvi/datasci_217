@@ -63,3 +63,7 @@ scratch/
 */demo/output/
 11/output/
 11/output/*
+
+# Reference books kept locally; not for redistribution
+work/tufte/
+.checks/

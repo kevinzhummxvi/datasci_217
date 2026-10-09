@@ -160,6 +160,13 @@ x = np.linalg.solve(A, b)
 
 # Advanced Indexing
 
+## Reference Card: Three-Dimensional Selection
+
+- `arr3d[i]`: Select one 2-D plane.
+- `arr3d[i, j]`: Select one 1-D row from that plane.
+- `arr3d[:, :, k]`: Keep two dimensions and select position `k` in the third.
+- A single-number index removes a dimension; `:` keeps it.
+
 Use these when a selection needs a grid of chosen rows and columns at once, or when an array has more than two dimensions.
 
 ## Code Snippet: Select Grids and Higher Dimensions
@@ -223,7 +230,7 @@ is_member = np.isin(arr1, arr2)                  # Boolean array
 
 # Advanced Sorting
 
-The lecture sorted whole arrays, sorted along an axis, and ordered rows by one column. Use `np.argpartition` when you need only the k smallest values, and `np.lexsort` to order by one key and break ties with another.
+The lecture's **Sorting and Ranking** covers sorting along an axis and ordering whole rows by one column. This section adds two more tools: use `np.argpartition` when you need only the k smallest values, and `np.lexsort` to order by one key and break ties with another.
 
 ## Code Snippet: Partial Sorts and Tie-Breaking
 
@@ -447,7 +454,7 @@ tail -n +2 data/raw/encounters.csv \
 
 ## Optional reference: Quick Data Visualization
 
-These tools plot a column without leaving the terminal: a quick look at a trend, a sanity check on a pipeline's output, or a small dashboard. Lecture 07 covers plotting in Python.
+These tools plot a column without leaving the terminal: a quick look at a trend, a sanity check on a pipeline's output, or a small dashboard.
 
 ### Code Snippet: Plot in the Terminal
 
@@ -474,4 +481,57 @@ cut -d',' -f3 data/raw/encounters.csv | tail -n +2 \
   | gnuplot -e "set terminal dumb; plot '-' with linespoints"
 cut -d',' -f4 data/raw/encounters.csv | tail -n +2 | sort | uniq -c \
   | gnuplot -e "set terminal dumb; plot '-' using 1 with boxes"
+```
+
+# Other Environment Tools
+
+## Using standard-library venv (alternative)
+
+Python's standard library includes `venv`, which creates an environment with pip already in it; pip installs from `requirements.txt`, not `uv.lock`. Use one environment tool per project.
+
+### Reference Card: standard-library `venv`
+
+| Task | Command | Note |
+| :--- | :--- | :--- |
+| Create | `python3 -m venv .venv` | Uses the installed Python 3.13. |
+| Activate | `source .venv/bin/activate` | PowerShell: `.\.venv\Scripts\Activate.ps1`; Git Bash: `source .venv/Scripts/activate`. |
+| Install | `python3 -m pip install -r requirements.txt` | Uses the active environment's pip. |
+| Leave | `deactivate` | Returns to the previous shell environment. |
+
+## Using Conda (alternative comparison)
+
+[Conda documentation](https://docs.conda.io/)
+
+Conda manages Python environments and packages, including non-Python dependencies.
+
+### Reference Card: Conda alternative
+
+| Task | Command | Result |
+| :--- | :--- | :--- |
+| Create | `conda create --prefix ./.venv python=3.13 pip` | Creates the same `.venv` location with Conda. |
+| Activate | `conda activate ./.venv` (PowerShell: `conda activate .\.venv`) | Selects the Conda environment. |
+| Install | `python3 -m pip install -r requirements.txt` | Installs the packages a requirements file lists. |
+| Leave | `conda deactivate` | Returns to the previous environment. |
+
+# More Fancy Indexing
+
+**Fancy indexing** selects by a list of positions instead of a mask, in any order you choose. Like a mask, it returns a copy.
+
+## Reference Card: Fancy Indexing
+
+- `arr[[i, j]]`: The elements at positions `i` and `j`, in that order; a new copy.
+- `arr2d[[i, j]]`: Rows `i` and `j`, in that order.
+- `arr2d[:, [j, k]]`: Columns `j` and `k` of every row, in that order.
+- `arr[[i, j]] = value`: Replaces those elements in place; changes `arr`.
+
+## Code Snippet: Pick Positions, Rows, and Columns
+
+```python
+ids = np.array(["P001", "P002", "P003"])   # one ID per row of bp
+print(ids[[2, 0]])       # ['P003' 'P001']
+print(bp[[2, 0]])        # [[118 121 119]
+                         #  [128 131 126]]: rows 2 and 0, in that order
+print(bp[:, [0, -1]])    # [[128 126]
+                         #  [142 139]
+                         #  [118 119]]: each patient's first and last visit
 ```

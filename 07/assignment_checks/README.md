@@ -10,7 +10,7 @@ push from `christopherseaman/datasci_217@main:07/assignment_checks/` (its
 grades with them.
 
 The handout ships a byte-identical copy of every file the workflow lists in
-`CHECKS_FILES`, so `python check_assignment.py` in a student's repository
+`CHECKS_FILES`, so `python3 check_assignment.py` in a student's repository
 prints each check's result, what to fix, and the score, exactly as GitHub will.
 The listed files:
 
@@ -33,23 +33,23 @@ student's repository and says so in the log.
 
 Correct a check here and copy the changed file over its twin in
 `07/assignment/`; the self-test fails while the two differ. Every fork gets the
-correction on its next push. A student's local copy changes only when the
-handout is republished (`scripts/publish_assignment.sh 07 ...`) and the student
-syncs the fork, so until then the local run can lag the GitHub run, and the
-GitHub run counts.
+correction on its next push. The local `check_assignment.py` downloads the
+current `_value_checks.py` and `grading.py` from main, falling back to the
+bundled copy offline or with `--local-checks` / `DS217_LOCAL_CHECKS=1`, so local
+and GitHub runs agree.
 
 `_value_checks.py` holds its own copy of the supplied data (`REHAB_PATIENTS`
 and `FOLLOWUP_GOALS`); change it together with `data/rehab_patients.csv` or
 `data/followup_goals.csv`. A change to the check list or to `POINTS` belongs in
 `_value_checks.py` and `grading.py` at once, in the same order: `grading.py`
-zips the checks against `POINTS` with `strict=True`. Keep the README's
+pairs the checks with `POINTS` and raises when their counts differ. Keep the README's
 completion contract in agreement with `POINTS`.
 
 ## Checking the checks
 
 ```bash
-uv run --python 3.13 --with-requirements 07/assignment/requirements.txt \
-    python 07/assignment_checks/_grader_selftest/run.py
+uv run --python 3.13 --with numpy==2.3.3 --with pandas==3.0.5 --with matplotlib==3.11.1 \
+    --with altair==5.5.0 python 07/assignment_checks/_grader_selftest/run.py
 ```
 
 It grades every kind of submission and confirms the handout's copy matches this

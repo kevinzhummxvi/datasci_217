@@ -32,6 +32,8 @@ jobs:
     timeout-minutes: 15
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # This job fetches and smoke-tests the checks itself; the checker must use those files.
+      DS217_LOCAL_CHECKS: "1"
 
     steps:
       - name: Check out assignment
@@ -45,10 +47,10 @@ jobs:
           cache-dependency-path: .github/test/requirements.txt
 
       # The checks only read the committed artifacts and need nothing beyond
-      # pytest, so the job never installs the assignment's own requirements.txt:
-      # a line there that does not install cannot stop grading. The committed
-      # list comes first so the rest of the job always has a working Python and
-      # pytest, whatever the download turns out to contain.
+      # pytest, so the job never installs the assignment's own pyproject.toml or
+      # uv.lock: a package there that does not install cannot stop grading. The
+      # committed list comes first so the rest of the job always has a working
+      # Python and pytest, whatever the download turns out to contain.
       - name: Install the test runner
         run: |
           set -euo pipefail

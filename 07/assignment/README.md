@@ -1,29 +1,8 @@
 # Assignment 07: Critique, Redesign, and Explain Cardiac Rehab Charts
 
-## Files
+## Overview
 
-```text
-assignment/
-├── assignment.ipynb        # the notebook you complete
-├── data/                   # supplied; keep these files exactly as handed out
-│   ├── rehab_patients.csv      # Task 1
-│   ├── session_attendance.csv  # Task 2
-│   └── followup_goals.csv      # Task 3
-├── requirements.txt        # supplied: numpy, pandas, matplotlib, Altair, and ipykernel
-├── .python-version         # supplied: tells uv to use Python 3.13
-├── check_assignment.py     # supplied: run it to check your work; keep unchanged
-├── grading.py, _value_checks.py  # supplied: the checks themselves; keep unchanged
-├── test_assignment.py, .github/  # supplied: run the checks on GitHub; keep unchanged
-└── output/
-    ├── exploratory_spec.json             # you generate in Task 1
-    ├── visualization_evidence.json       # you generate in Task 2 and save again in Task 3
-    ├── critique_redesign.png             # you generate in Task 2
-    ├── explanatory_supporting_data.csv   # you generate in Task 3
-    ├── explanatory_chart.png             # you generate in Task 3
-    └── explanatory_text_alternative.txt  # you generate in Task 3
-```
-
-## The data
+Critique the rehab service's charts with Altair and Matplotlib, redesign a misleading one, and explain one finding to the program coordinator, saving each result for the checks.
 
 All three files are synthetic and come from one hospital's cardiac rehabilitation service. After a heart attack or heart surgery, patients join a 36-session exercise program, either at the hospital (`Center-based`) or at home with weekly phone coaching (`Home-based`).
 
@@ -41,21 +20,44 @@ Patients chose their program, and a few dozen rows describe only this service, s
 
 ## Setup
 
-Fork the assignment repository on GitHub and clone your fork the way Lecture 01 did: Command Palette → **Git: Clone**, paste your fork's URL, pick a folder, and open it. Then open **Terminal → New Terminal** in VS Code at the assignment directory (Ctrl+Shift+backtick, also Control on Mac). If you use a native terminal or WSL Ubuntu instead, `cd` into the assignment directory first. Run `ls data` and expect the three CSV files above. This clone is a new repository, so before your first commit run Lecture 02's two `git config user.name "..."` and `git config user.email "..."` lines in this terminal, with your name and GitHub noreply email.
+1. Fork the assignment repository on GitHub and clone your fork as in Lecture 01: Command Palette → **Git: Clone**, paste your fork's URL, pick a folder, and open the cloned folder itself, not a folder above it.
+2. In the integrated terminal, create the environment, activate it, and install the packages `pyproject.toml` and `uv.lock` list. Do not run `uv init`: the project files already exist.
 
-Create the project environment, activate it, and install the supplied requirements, as in Lecture 03:
+    ```bash
+    uv venv --seed
+    source .venv/bin/activate
+    uv sync
+    ```
 
-```bash
-uv venv --seed --python 3.13 .venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+    - Expect: `uv sync` lists `+ altair==5.5.0` and `+ pandas==3.0.5` among the packages it installs.
+3. Open `assignment.ipynb`, click **Select Kernel** at the top right, and choose the Python inside this project's `.venv`.
+4. Run the notebook's first code cell.
+    - Expect: the NumPy, pandas, matplotlib, and Altair versions, and `data files found: True`.
+
+## Files
+
+```text
+assignment/
+├── assignment.ipynb        # the notebook you complete
+├── data/                   # supplied; keep these files exactly as handed out
+│   ├── rehab_patients.csv      # Task 1
+│   ├── session_attendance.csv  # Task 2
+│   └── followup_goals.csv      # Task 3
+├── pyproject.toml          # supplied: numpy, pandas, matplotlib, Altair, and ipykernel
+├── uv.lock                 # supplied: the exact versions `uv sync` installs
+├── .python-version         # supplied: tells uv to use Python 3.13
+├── CHECKS.md               # supplied: what each check looks for
+├── check_assignment.py     # supplied: run it to check your work; keep unchanged
+├── grading.py, _value_checks.py  # supplied: the checks themselves; keep unchanged
+├── test_assignment.py, .github/  # supplied: run the checks on GitHub; keep unchanged
+└── output/
+    ├── exploratory_spec.json             # you generate in Task 1
+    ├── visualization_evidence.json       # you generate in Task 2 and save again in Task 3
+    ├── critique_redesign.png             # you generate in Task 2
+    ├── explanatory_supporting_data.csv   # you generate in Task 3
+    ├── explanatory_chart.png             # you generate in Task 3
+    └── explanatory_text_alternative.txt  # you generate in Task 3
 ```
-
-`requirements.txt` includes **ipykernel**, the package that lets a notebook run on this environment's Python (Lecture 04), so this one install is all the notebook needs. Open `assignment.ipynb`, click **Select Kernel** at the top right, and choose the Python inside this project's `.venv`. If VS Code offers to install the **Jupyter** extension, accept.
-
-> **Windows:** work in the **WSL: Ubuntu** window from Lecture 01's setup. In PowerShell instead, activate with `.\.venv\Scripts\Activate.ps1`.
-
-Run the notebook's first code cell. It prints the NumPy, pandas, matplotlib, and Altair versions and `data files found: True`. `False` means the notebook is not running from the assignment directory, so open the folder itself in VS Code, not a folder above it.
 
 ## Task 1: Explore the rehab patients with Altair
 
@@ -65,7 +67,7 @@ A rehab nurse asks whether patients who attend more sessions walk farther at dis
 
 In the Task 1.1 cell:
 
-1. Read the patients with `patients = pd.read_csv(PATIENTS_PATH)`. Print the shape and the dtypes; expect `(12, 4)`.
+1. Read the patients with `patients = pd.read_csv(PATIENTS_PATH)`. Print the shape and display the dtypes (`display(patients.dtypes)`); expect `(12, 4)`.
 2. Build `exploratory_chart` from `alt.Chart(patients)` with `.mark_point(filled=True, size=90)` and these encodings, as Lecture 07's "Encode the study table" snippet does:
     - `x`: `sessions_attended` as quantitative (`:Q`), titled with its unit, such as `Sessions attended (of 36)`;
     - `y`: `walk_distance_m` as quantitative, titled `Six-minute walk distance (m)`, with `scale=alt.Scale(zero=False)`;
@@ -109,7 +111,7 @@ In the Task 2.2 cell, fill in each entry's `problem` (what is wrong, and how it 
 
 ### 2.3 Redesign the chart
 
-In the Task 2.3 cell, reuse `quarters`, `x`, `width`, `home`, and `center` from the Task 2.1 cell to draw the same four bars on `redesign_ax`, repairing each problem, as Lecture 07's "Grouped Bars That Work in Grayscale" snippet does:
+In the Task 2.3 cell, reuse `quarters`, `x`, `width`, `home`, and `center` from the Task 2.1 cell to draw the same four bars on `redesign_ax`, repairing each problem, as Lecture 07's "Give a Bar Series Its Own Hatch" and "Write Values on Bars" snippets and Demo 3's core redesign do:
 
 - start the y-axis at zero with `redesign_ax.set_ylim(0, 100)`, because bar length encodes the value;
 - label the y-axis with its unit, such as `Scheduled sessions attended (%)`, and the x-axis `Quarter`;
@@ -131,8 +133,8 @@ The rehab program coordinator is deciding where to add follow-up support. Your e
 
 In the Task 3.1 cell:
 
-1. Read `followup = pd.read_csv(FOLLOWUP_PATH)` and print it.
-2. Write the chart's contract as five strings: `question`, `audience` (who reads the chart and what they will use it for), `intended_claim` (the one descriptive conclusion the chart supports), `displayed_unit` (what the y-axis measures, with its unit), and `grain` (what one row of the plotting table and one point on a line represent).
+1. Read `followup = pd.read_csv(FOLLOWUP_PATH)` and display it.
+2. Write the chart's contract as five strings: `question`, `audience` (who reads the chart and what they will use it for), `intended_claim` (the one descriptive conclusion the chart supports), `y_measure` (what the y-axis measures, with its unit of measurement), and `grain` (what one row of the plotting table and one point on a line represent, which Lecture 07 calls the unit displayed).
 3. Fill in `data_types` with each plotted column's data type, in Lecture 07's words: `categorical`, `quantitative`, `ordinal`, or `temporal`. `visit_number` is the order of the visits, not a date.
 4. Select the three plotted columns, `program`, `visit_number`, and `goal_met_pct`, into `supporting_data`, and save it to `SUPPORTING_DATA_PATH` with `index=False`.
 
@@ -143,7 +145,7 @@ The cell reads the file back and prints `shape: (8, 3)` and `same as saved: True
 
 ### 3.2 Draw the explanatory chart
 
-The Task 3.2 cell supplies `home_goals` and `center_goals`, each program's four rows. Draw one line per program on `explanatory_ax`, as Lecture 07's "Redundant Cues on a Line Chart" snippet does:
+The Task 3.2 cell supplies `home_goals` and `center_goals`, each program's four rows. Draw one line per program on `explanatory_ax`, using Lecture 07's "Directly Label a Line" snippet, its "Redundant Cues for Bars and Lines" card, and Demo 3's HbA1c practice chart:
 
 - `visit_number` on x and `goal_met_pct` on y;
 - each program with its own color, marker, and line style, such as `ORANGE`, `'s'`, and `'--'` for Home-based and `BLUE`, `'o'`, and `'-'` for Center-based, named by a direct label at its right end or by a legend;
@@ -161,14 +163,14 @@ Save with `explanatory_fig.savefig(EXPLANATORY_PATH, dpi=150, bbox_inches="tight
 In the Task 3.3 cell:
 
 1. Write `text_alternative`, one paragraph that names the chart type, both axes and their units, both programs, how each changes from visit 1 to visit 4, the gap at visit 4, and a limitation: patients chose their program, so the gap does not show that one program causes more exercise. Lecture 07's "Make the chart accessible" section has an example.
-2. Add the keys `question`, `audience`, `intended_claim`, `displayed_unit`, `grain`, `data_types`, and `text_alternative` to `visualization_evidence`, each holding the variable of the same name. `critique` is already there.
+2. Add the keys `question`, `audience`, `intended_claim`, `y_measure`, `grain`, `data_types`, and `text_alternative` to `visualization_evidence`, each holding the variable of the same name. `critique` is already there.
 3. Save `visualization_evidence` to `EVIDENCE_PATH` with `json.dump(..., indent=2, ensure_ascii=False)`, as the Task 2.2 cell does. This replaces the Task 2.2 file and keeps its critique.
 4. Write `text_alternative` to `TEXT_ALTERNATIVE_PATH` with `open(..., "w", encoding="utf-8")` and `file.write()`.
 
 The cell reads the JSON back and prints its eight keys.
 
 > **Checkpoint: `output/visualization_evidence.json`**
-> An object with the eight keys `critique`, `question`, `audience`, `intended_claim`, `displayed_unit`, `grain`, `data_types`, and `text_alternative`. `data_types` maps `program`, `visit_number`, and `goal_met_pct` to their data types.
+> An object with the eight keys `critique`, `question`, `audience`, `intended_claim`, `y_measure`, `grain`, `data_types`, and `text_alternative`. `data_types` maps `program`, `visit_number`, and `goal_met_pct` to their data types.
 
 > **Checkpoint: `output/explanatory_text_alternative.txt`**
 > The same paragraph as `text_alternative` in the JSON.
@@ -179,78 +181,9 @@ Open `output/critique_redesign.png` and `output/explanatory_chart.png`, and answ
 
 ## Check your work
 
-Click **Restart**, then **Run All**. The last cell prints `Fresh-run check passed`, or names the task to fix. Then, with the environment active, run the checks from the assignment directory:
+- Run the checks any time, even partway through: `python3 check_assignment.py` in the terminal (with the environment active) prints your score and what to fix.
+- When **Restart** and **Run All** finish without errors, the notebook's last cell runs the same checks.
+- Both use the latest checks from the course repository, the same checks GitHub runs on each push. Commit `assignment.ipynb` and the `output/` files, then push.
+- Expect: a passing run ends with `Score: 100/100`.
 
-```bash
-python check_assignment.py
-```
-
-`check_assignment.py` runs the same checks GitHub runs. They read only the six files in `output/` and compare them with the supplied data. They never run or read your notebook, so any way of producing correct files counts.
-
-Each check prints `PASS` or `FIX` and the points it earned, and a `FIX` says what to fix on the line beneath it. When the next checks need the same fix, such as a missing file, they say `(same fix as above)`. Before Task 1, for example, the first check reports:
-
-```text
-[FIX ]  0/4  exploratory spec: point mark
-         output/exploratory_spec.json is missing; run the Task 1.1 cell to write it, then commit it.
-```
-
-Below the score, `Left to fix` lists the checks still failing and the points they are worth. Fix what they name, rerun the notebook and then the checks, and repeat until every check passes. A clean run ends with:
-
-```text
-[PASS]  2/2  text alternative file
-
-Score: 100/100
-All checks passed.
-```
-
-How the files are read:
-
-- Each check is scored on its own, so one mistake costs only that check's points.
-- Spacing, line endings, quoting, key order, and column order never cost points, and extra keys in the JSON files are ignored.
-- Numbers are compared as numbers, so `79`, `79.0`, and `79.00` are the same value.
-- Program names, categories, keys, column names, and data types are compared in any letter case. A data type may carry a note, as in `ordinal (visit order)`. `nominal` and `qualitative` count as categorical, `numeric` and `continuous` as quantitative, and `ordered` as ordinal, alone or beside categorical, as in `categorical (ordered)`.
-- A leading column of row numbers, which `to_csv()` writes when `index=False` is left out, is ignored.
-- The exploratory spec is compared on the three plotted columns only, so leaving out `patient_id` or adding a column costs nothing.
-- The PNG checks confirm that each chart was saved as a PNG image, and the text checks confirm that each answer is filled in. The wording and the look are yours, so open both PNG files and check them against Tasks 2.3 and 3.2 yourself.
-
-Every push also runs GitHub Actions, which downloads the course's current copy of the checks and reruns them on the files you committed and pushed. That run is what counts, and a check corrected after handout reaches you there on your next push.
-
-### Completion contract
-
-Grading totals 100 points and reads these files relative to the assignment root.
-
-| Artifact | Complete when | Check | Points |
-| --- | --- | --- | ---: |
-| `output/exploratory_spec.json` | Its mark is `point`. | exploratory spec: point mark | 4 |
-| `output/exploratory_spec.json` | Its embedded rows hold the twelve patients' `program`, `sessions_attended`, and `walk_distance_m`. | exploratory spec: embedded patient rows | 5 |
-| `output/exploratory_spec.json` | It encodes `sessions_attended` as quantitative `x`. | exploratory spec: x encoding | 4 |
-| `output/exploratory_spec.json` | It encodes `walk_distance_m` as quantitative `y`. | exploratory spec: y encoding | 4 |
-| `output/exploratory_spec.json` | It encodes `program` as nominal `color`. | exploratory spec: color encoding | 4 |
-| `output/exploratory_spec.json` | It encodes `program` as nominal `shape`. | exploratory spec: shape encoding | 4 |
-| `output/critique_redesign.png` | It is a PNG image. | critique redesign: PNG image | 12 |
-| `output/visualization_evidence.json` | Its `critique` has an `unsupported claim` entry with a `problem` and a `repair`. | critique: unsupported claim | 5 |
-| `output/visualization_evidence.json` | Its `critique` has a `truncated baseline` entry with a `problem` and a `repair`. | critique: truncated baseline | 5 |
-| `output/visualization_evidence.json` | Its `critique` has a `missing unit` entry with a `problem` and a `repair`. | critique: missing unit | 5 |
-| `output/visualization_evidence.json` | Its `critique` has a `color-only encoding` entry with a `problem` and a `repair`. | critique: color-only encoding | 5 |
-| `output/visualization_evidence.json` | Its `critique` has a `distracting decoration` entry with a `problem` and a `repair`. | critique: distracting decoration | 5 |
-| `output/explanatory_chart.png` | It is a PNG image. | explanatory chart: PNG image | 8 |
-| `output/explanatory_supporting_data.csv` | Its columns are `program`, `visit_number`, and `goal_met_pct`. | supporting data: columns | 4 |
-| `output/explanatory_supporting_data.csv` | It holds the eight rows of `data/followup_goals.csv`, unchanged. | supporting data: rows and values | 6 |
-| `output/visualization_evidence.json` | Its `question` is filled in. | evidence: question | 2 |
-| `output/visualization_evidence.json` | Its `audience` is filled in. | evidence: audience | 2 |
-| `output/visualization_evidence.json` | Its `intended_claim` is filled in. | evidence: intended_claim | 2 |
-| `output/visualization_evidence.json` | Its `displayed_unit` is filled in. | evidence: displayed_unit | 2 |
-| `output/visualization_evidence.json` | Its `grain` is filled in. | evidence: grain | 2 |
-| `output/visualization_evidence.json` | Its `text_alternative` is filled in. | evidence: text_alternative | 2 |
-| `output/visualization_evidence.json` | Its `data_types` gives `program` as categorical. | data type: program | 2 |
-| `output/visualization_evidence.json` | Its `data_types` gives `visit_number` as ordinal. | data type: visit_number | 2 |
-| `output/visualization_evidence.json` | Its `data_types` gives `goal_met_pct` as quantitative. | data type: goal_met_pct | 2 |
-| `output/explanatory_text_alternative.txt` | It holds the same text as `text_alternative` in the JSON. | text alternative file | 2 |
-
-Extra files are ignored.
-
-## Submit
-
-Before you commit a notebook, follow Lecture 04's "Before You Commit a Notebook": click **Clear All Outputs**, then save. In VS Code Source Control, stage `assignment.ipynb` and all six files in `output/`. Commit with `Complete Assignment 07 charts` and select **Sync Changes**. Keep `.venv/` out of the commit; `.gitignore` already lists it.
-
-Confirm the notebook and the six output files on `main` in the repository browser. GitHub Actions runs the checks automatically on every push; enable Actions once if GitHub prompts you in a fork. If a run cannot download the course's current checks, it grades with the copy in your repository and says so in its log. If your local run and the GitHub run ever disagree, the GitHub run counts, because it uses the course's current checks. If a required VS Code control is unavailable, record its message and contact the instructor.
+What each check looks for: [CHECKS.md](CHECKS.md)

@@ -13,7 +13,17 @@ See [BONUS.md](BONUS.md) for the optional extensions.
 
 [Live Demo Guide](demo/DEMO_GUIDE.md)
 
-**Note:** After today we should complete McKinney’s _Python for Data Analysis_ through ch03
+This lecture covers:
+
+- McKinney, _Python for Data Analysis_ (3rd ed.):
+    - 2.3 (strings and modules)
+    - 3.1 (lists, tuples, dictionaries, and sets)
+    - 3.2 (functions, return values, and exceptions)
+    - 3.3 (files)
+- Shotts, _The Linux Command Line_:
+    - Chapter 8 (editing command lines)
+- MIT, _The Missing Semester_:
+    - Version Control (Git), through branches, merging, and merge conflicts
 
 # VS Code Basics
 
@@ -40,19 +50,13 @@ The **Command Palette** lists every VS Code action by name: type part of a name 
 
 ![VS Code's integrated terminal with command history](media/vscode-integrated-terminal.png)
 
-### Reference Card: Shell Shortcuts
+### Reference Card: Editing a Command Line
 
-- **Tab**: Complete a command or path; if ambiguous, press again to see choices.
-- **↑ / ↓**: Recall previous/next commands.
 - **← / →**: Move one character.
 - **Ctrl+A**: Move to the beginning of the line.
 - **Ctrl+E**: Move to the end of the line. On Windows/Linux, VS Code claims **Ctrl+E** for Quick Open, so press **End** there.
 - **Ctrl+← / Ctrl+→** (Windows/Linux): Move by word. On Mac, press **Esc**, then **B** or **F**.
-- **Ctrl+R**: Search command history; type part of a command, press again for older matches.
 - **Ctrl+W**: Delete the preceding word.
-- **Ctrl+L**: Clear the view without deleting command history.
-- **Enter**: Run the edited command.
-- **Ctrl+C**: Abandon the line for a fresh prompt.
 
 These work while the terminal has focus, and **Ctrl** means Control even on Mac.
 
@@ -63,11 +67,7 @@ These work while the terminal has focus, and **Ctrl** means Control even on Mac.
 
 ![Python: Select Interpreter with Python 3.13 chosen; your list shows the Pythons on your computer](media/vscode-selected-interpreter.png)
 
-Make it Py-pretty: extensions, themes, window layouts, and format-on-save are in [BONUS.md](BONUS.md#vs-code-extensions-themes-and-settings).
-
 ## Command-Line Catalog
-
-Commands to recognize from the shell; the [command-line bonus](BONUS.md#command-line-essentials) has examples.
 
 | Area | Commands | Purpose |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ Git records a project as a series of **commits**: snapshots of the tracked files
 
 ### Reference Card: Git Vocabulary
 
-- **Working tree**: Your files as they are now, including uncommitted edits.
+- **Working tree (working directory)**: Your files as they are now, including uncommitted edits.
 - **Diff**: Line-by-line comparison of two versions; click a changed file in Source Control.
 - **Staging area**: Changes selected for the next commit; a later edit needs staging again.
 - **Commit**: A snapshot with author, time, and message.
@@ -137,17 +137,12 @@ Source Control runs the diagram's steps: review a change, stage it, commit, then
 
 ### Good vs. Bad Commit Messages
 
-In the message box, write a summary that finishes "This commit will...", then a blank line and why:
+Write a message that says what the change does. Add a longer explanation when the reason needs context; `git commit -m "Summary" -m "Why it changed"` makes a subject and a separate body paragraph.
 
-```bash
-# Good commit message
-git commit -m "Add blood pressure range check" \
-  -m "Systolic readings outside 60-250 mmHg are recording errors,
-so the report now skips them instead of averaging them in."
-
-# Bad commit message
-git commit -m "minor changes"
-```
+| Useful | Too vague |
+| --- | --- |
+| `Add blood pressure range check` | `minor changes` |
+| `Skip encounters with missing systolic readings` | `fix stuff` |
 
 ![xkcd 1296: Git Commit. Commit messages get less informative as a project drags on](media/xkcd_1296.png)
 
@@ -171,11 +166,9 @@ A **branch** is a separate line of commits. Build a change on one, such as a new
 
 ## Merge Conflicts
 
-A conflict happens when two branches, or your commits and a teammate's, changed the same lines, so Git cannot pick a version. The merge or sync stops, the file appears under **Merge Changes** in Source Control, and `git status --short` marks it `UU`.
+A conflict happens when two branches, or your commits and a teammate's, changed the same lines, so Git cannot pick a version. The merge or sync stops, and the file appears under **Merge Changes** in Source Control with a `!` badge.
 
 ![Dev A and Dev B both update file A; after Dev A pushes, Dev B's pull or push hits a merge conflict](media/git_merge_conflict.png)
-
-### Resolving on the Command Line (for the adventurous)
 
 Git writes both versions into the file between markers:
 
@@ -193,36 +186,32 @@ Experiment: compare three systolic summaries.
 | `<<<<<<< HEAD` to `=======` | The branch you are on | **Current Change** |
 | `=======` to `>>>>>>> experiment` | The branch you are merging in | **Incoming Change** |
 
-Edit the file to the version you want, delete the three marker lines, then stage and commit to finish the merge:
-
-```bash
-git add notes.md
-git commit -m "Merge branch 'experiment'"
-```
-
 ### Resolving in VS Code
-
-Microsoft wrote this up better than me at: [https://code.visualstudio.com/docs/sourcecontrol/merge-conflicts](https://code.visualstudio.com/docs/sourcecontrol/merge-conflicts)
 
 ![VS Code marks a conflict with Accept actions above it and a Resolve in Merge Editor button](media/vscode_merge_conflict_inline.png)
 
-Open the conflicted file from **Merge Changes** and resolve it one of two ways:
+Open the file from **Merge Changes**. Select **Accept Current Change**, **Accept Incoming Change**, or **Accept Both Changes** above the block, or edit the result yourself and delete the marker lines. Use **Compare Changes** to inspect both versions before choosing. Save, review the result, stage with **+**, then **Commit** to finish the merge.
 
-- **Inline**: Above the block, select **Accept Current Change**, **Accept Incoming Change**, or **Accept Both Changes** (**Compare Changes** shows the two side by side first), or edit the lines yourself and delete the three marker lines. Save, then stage the file with **+**.
-- **Merge editor**: Select **Resolve in Merge Editor** at the lower right of the file. **Incoming** (left) and **Current** (right) sit above **Result**; select **Accept Incoming** or **Accept Current** above each conflict, check **Result**, and select **Complete Merge**, which saves and stages the file.
+**Resolve in Merge Editor** shows Incoming on the left, Current on the right, and Result below. Select **Accept Incoming** or **Accept Current**, review Result, then **Complete Merge** to save and stage it; **Commit** finishes the merge.
 
-Then select **Commit**; VS Code fills in the merge message.
+Microsoft's [VS Code merge-conflict guide](https://code.visualstudio.com/docs/sourcecontrol/merge-conflicts) walks through both views with screenshots.
+
+### Reference Card: Finish a Conflict in the Terminal
+
+- Edit the file to keep the intended result and delete all three marker lines.
+- `git add notes.md`: Stage the resolved file.
+- `git commit -m "Merge branch 'experiment'"`: Complete the merge.
 
 ## Alternative: Git in the Terminal
 
-Every Source Control button runs a Git command. Demo 1's terminal path uses these; [BONUS.md](BONUS.md) covers the rest.
+Every Source Control button runs a Git command.
 
 ### Reference Card: Git in the Terminal
 
 | Task | Command | Result |
 | --- | --- | --- |
 | Start a repository | `git init` | A hidden `.git` folder |
-| Check state | `git status` | Modified, staged, or "working tree clean"; `--short` prints one line per file |
+| Check state | `git status` | Modified, staged, or "working tree clean"; `--short` prints one line per file, `UU` for a conflict |
 | Inspect edits | `git diff` | Unstaged line changes: `+` added, `-` removed |
 | Stage | `git add FILE` | FILE's changes go into the next commit |
 | Commit | `git commit -m "message"` | A new local commit |
@@ -248,10 +237,11 @@ GitHub's website shows the remote copy: check what arrived after **Sync Changes*
 ## `.gitignore`
 
 <callout icon="⚠️" color="yellow_bg">
+	## Never commit patient data or secrets
 	Never commit protected health information (**PHI**), personally identifiable information (**PII**), passwords, or keys. A commit is permanent: deleting the file later leaves it in every earlier snapshot and every clone.
 </callout>
 
-A **`.gitignore`** file lists **patterns** for files Git should not track. List clutter there too, such as Python's `__pycache__/` folder. A pattern does not untrack files already committed and pushed commits with unwanted files are difficult-to-impossible to undo cleanly.
+A **`.gitignore`** file lists **patterns** for files Git should not track. List clutter there too, such as Python's `__pycache__/` folder. A pattern does not untrack files already committed. Pushed commits that contain unwanted files are difficult or impossible to undo cleanly.
 
 `git status --short` marks untracked files `??`. Before and after a `.gitignore` with `__pycache__/`, `*.pyc`, and `data/raw/*.csv`:
 
@@ -267,49 +257,48 @@ Before                  After
 
 ### Reference Card: Ignore Patterns
 
-- `# comment`: A note; Git skips the line.
-- `*.csv`: Every file ending in `.csv`.
-- `__pycache__/`: A directory and everything in it; the trailing `/` matches directories only.
+- `__pycache__/`: Ignore the directory holding Python's compiled cache files.
+- `*.pyc`: Ignore compiled Python files.
+- `*.csv`: Ignore every CSV file; use a narrower path when the project commits synthetic or public data.
+- `data/raw/*.csv`: Ignore CSV exports in this folder.
+- `# comment`: A note inside `.gitignore`; Git skips this line.
 - `file?.txt`: Any one character in place of `?`, such as `file1.txt`.
-- `*.py[cod]`: Any one of the bracketed characters, so `.pyc`, `.pyo`, and `.pyd` files.
-- `!keep.csv`: Re-include a file matched by an earlier pattern.
+- `*.py[cod]`: One of the bracketed characters; matches `.pyc`, `.pyo`, and `.pyd`.
+- `!data/raw/codebook.csv`: Re-include this file after a broader ignore pattern.
 - `**/cache/`: A `cache` directory at any depth.
 
 ### Code Snippet: A Project's `.gitignore`
 
 ```gitignore
-# Hint: .gitignore is just a text file
-
-# Python cache files
 __pycache__/
 *.pyc
-
-# Data and secrets
 data/raw/*.csv
+!data/raw/codebook.csv
 .env
 *.key
-
-# IDE files
 .vscode/
 .idea/
-
-# Keep the codebook, which the raw-data pattern above ignores
-!data/raw/codebook.csv
 ```
+
+A leading `!` reverses an earlier match. Put exceptions after the pattern they override; `__pycache__/` and the editor patterns match directories only.
 
 # LIVE DEMO!
 
 # Python Fundamentals
 
-![xkcd 1429: Data. In Python, everything is an object; in Star Trek, Data is too](media/xkcd_1429.png)
+![xkcd 1429: Data. Is "data" singular or plural? Python does not care; a list holds one value or many](media/xkcd_1429.png)
 
-Health data rarely fits one value per variable: a patient has several readings, a visit pairs an ID with a date, and a clinic session has a set of patients.
+Health data rarely fits one value per variable, and results need clear formatting. This block covers:
+
+- **F-strings** format output, such as a mean rounded to one decimal, and `input()` reads values typed at the keyboard.
+- **Containers** hold many values at once: a patient has several readings (a list), a visit pairs an ID with a date (a tuple), a lookup maps patient IDs to readings (a dictionary), and a clinic session has a set of unique patients (a set).
+- **Functions** package a repeated calculation under a name, and **modules** let other scripts import those functions.
 
 ## F-Strings and Input
 
 <columns>
 	<column ratio="50">
-		![An f-string with a format spec after the colon](media/fstring_price.png)
+		![An f-string with a format spec after the colon: .2f rounds 1299.516 to 1299.52](media/fstring_price.png)
 	</column>
 	<column ratio="50">
 		![Format specs for decimals, thousands separators, and percentages](media/fstring_format_examples.png)
@@ -580,11 +569,7 @@ print(stats.mean([128, 142, 120]))   # 130
 print(pi)                            # 3.141592653589793
 ```
 
-For a quick check in the terminal, this prints `130`:
-
-```bash
-python3 -c "import statistics; print(statistics.mean([128, 142, 120]))"
-```
+`statistics` ships with Python; the alias `stats` keeps the call short.
 
 ### Code Snippet: Import Your Own Module
 
@@ -624,7 +609,13 @@ Run `python3 report.py` from that folder. The first import creates a `__pycache_
 
 # Files and Reusable Scripts
 
-A script's variables vanish when it ends, so results worth keeping go in files.
+A script's variables vanish when it ends, so results worth keeping go in files. This block turns the pieces from the last one into a script that reads data, survives bad rows, and documents itself:
+
+- **String methods** take a line of a data file apart and build output text.
+- **Files** are read and written with `open()` so results last after the script ends.
+- **Exceptions** let a script handle a bad value instead of crashing, and **assertions** check that each step did what it claimed.
+- The **`__main__`** guard lets one file run as a script and still be imported as a module.
+- **Markdown** in a `README.md` tells others what the project does and how to run it.
 
 ## String Methods
 
@@ -695,39 +686,31 @@ Python text ── write ──▶ output/vitals.txt ── read ──▶ saved
 | Path | `path.exists()` | Whether the file or folder is already there. | `True` / `False` |
 | Path | `path.read_text(encoding="utf-8")` / `path.write_text(text, encoding="utf-8")` | Read or replace a whole small file in one call, with no `with` block. | `'P001: 128 mmHg\n'` / characters written |
 
-### Code Snippet: Build a Path, Write, Read Back, Append
+### Code Snippet: Write and Read Back
 
 ```python
-from pathlib import Path
+with open("vitals.txt", "w", encoding="utf-8") as file:
+    file.write("P001: 128 mmHg\n")
 
-results = ["P001: 128 mmHg", "P002: 142 mmHg", "P003: 118 mmHg"]
-
-output_dir = Path("output")
-output_dir.mkdir(exist_ok=True)            # no error when output/ already exists
-vitals_path = output_dir / "vitals.txt"    # output/vitals.txt
-
-# Write: "w" creates the file, or replaces it if it exists
-with open(vitals_path, "w", encoding="utf-8") as file:
-    for result in results:
-        file.write(f"{result}\n")
-
-# Read back and compare; vitals_path.open(...) is the same as open(vitals_path, ...)
-with vitals_path.open("r", encoding="utf-8") as file:
+with open("vitals.txt", "r", encoding="utf-8") as file:
     saved_text = file.read()
 print(saved_text, end="")
-print("Saved text matches:", saved_text == "\n".join(results) + "\n")
-
-# Append: "a" adds to the end; print(..., file=file) adds the newline
-with open("log.txt", "a", encoding="utf-8") as file:
-    print("Analysis completed", file=file)
+print("Saved text matches:", saved_text == "P001: 128 mmHg\n")
 ```
 
 ```text
 P001: 128 mmHg
-P002: 142 mmHg
-P003: 118 mmHg
 Saved text matches: True
 ```
+
+### Code Snippet: Append One Log Line
+
+```python
+with open("log.txt", "a", encoding="utf-8") as file:
+    print("Analysis completed", file=file)
+```
+
+The file gains `Analysis completed` and a newline, keeping any earlier lines. The demo combines these methods with an output folder and several rows.
 
 ## Exceptions and Assertions
 
@@ -754,6 +737,7 @@ An **assertion**, `assert condition, message`, states what must be true at that 
 
 - `try:` / `except ValueError as error:`: Run the risky line; on that error only, run the handler, with the message in `error`.
 - `else:`: Runs only when the `try` block succeeded.
+- `finally:`: Runs whether or not an exception occurred, for cleanup such as a closing message.
 - `ValueError`: Right type, unusable value, such as `int("not recorded")`.
 - `KeyError`: A dictionary has no such key.
 - `FileNotFoundError`: `open()` on a path that does not exist; check with `path.exists()` first.
@@ -822,7 +806,7 @@ Only the first command prints: the import ran the `def` lines and skipped `main(
 
 ## Markdown and the README
 
-**Markdown** is plain text with a few symbols for formatting. It reads fine raw, GitHub and VS Code's preview show it formatted, and Notion formats most of the same symbols as you type. Every repository needs a `README.md`, which GitHub shows below the file list, saying what the project does and how to run it.
+**Markdown** is plain text with a few symbols for formatting. It reads fine raw, GitHub and VS Code's preview show it formatted, and Notion formats most of the same symbols as you type. Every repository needs a `README.md`, which GitHub shows below the file list, saying what the project does and how to run it. Markdown also communicates results: headings organize the report, links identify sources, tables compare values, and equations describe methods.
 
 ### Reference Card: Markdown
 
@@ -843,32 +827,20 @@ Only the first command prints: the import ran the `def` lines and skipped `main(
 | `$$` on the lines above and below an equation | An equation on its own line | |
 | `[Python docs](https://docs.python.org/3/)` | A link | |
 | `![Caption](media/chart.png)` | An image | Path relative to the `.md` file |
+| A header row, a `\| --- \| --- \|` row, and data rows | A table | Separate cells with `\|`; align the same number of columns in every row |
 
 ### Code Snippet: A Project README
 
 ```markdown
-# Systolic Summary
+# Clinic Vitals Report
 
-## Project description
-
-Prints the **average systolic** blood pressure of one clinic session's readings.
+Reads encounter data and saves a systolic summary to `output/vitals_report.txt`.
 
 ## Run
 
-From this folder, run `python3 analysis.py`.
-
-## Method
-
-$$
-\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i
-$$
-
-> Readings are in mmHg and are _not_ checked for recording errors.
-
-- [x] Average the readings
-- [ ] Skip readings outside 60 to 250 mmHg
+From this folder: `python3 clinic_report.py`
 ```
 
-Preview it in VS Code with **Ctrl+K** then **V** (**Cmd+K** then **V** on Mac).
+Preview with **Ctrl+K** then **V** (**Cmd+K** then **V** on Mac). The demo builds a README for the complete clinic-report workflow.
 
 # LIVE DEMO!
